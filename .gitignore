@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+**/build/
+
+# Experiment output
+results/*
+infrastructure/calibration/output/
+docs/experiments/calibration-output/
+
+# IDE and operating system
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# JVM diagnostics
+*.hprof
+hs_err_pid*
+
+# A small documented example remains trackable.
+!docs/experiments/example-result/
+!docs/experiments/example-result/**
+
+# Some docs
+docs/
+skills/
