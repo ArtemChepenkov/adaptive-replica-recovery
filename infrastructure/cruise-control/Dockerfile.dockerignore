@@ -1,0 +1,14 @@
+**
+!cruise-control/
+!cruise-control/**
+!.git/
+!.git/modules/
+!.git/modules/cruise-control/
+!.git/modules/cruise-control/**
+cruise-control/build/
+cruise-control/buildSrc/build/
+cruise-control/cruise-control/build/
+cruise-control/cruise-control-core/build/
+cruise-control/cruise-control-metrics-reporter/build/
+cruise-control/**/.gradle/
+cruise-control/.gradle/

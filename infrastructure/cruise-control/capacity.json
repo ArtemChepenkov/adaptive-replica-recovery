@@ -1,0 +1,9 @@
+{
+  "brokerCapacities": [
+    {
+      "brokerId": "-1",
+      "capacity": {"DISK": "10000", "CPU": "100", "NW_IN": "10000", "NW_OUT": "10000"},
+      "doc": "Development assumptions only: disk MB, CPU percent, network KB/s. Calibrate in Task 9."
+    }
+  ]
+}

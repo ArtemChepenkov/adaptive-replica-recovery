@@ -1,0 +1,3 @@
+[submodule "cruise-control"]
+	path = cruise-control
+	url = https://github.com/ArtemChepenkov/cruise-control.git
