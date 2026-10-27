@@ -1,0 +1,155 @@
+name: ${COMPOSE_PROJECT_NAME:-replica-recovery}
+
+x-broker: &broker
+  image: replica-recovery-kafka:4.0.0
+  build:
+    context: ..
+    dockerfile: infrastructure/cruise-control/Dockerfile
+    target: kafka
+  entrypoint: ["bash", "/etc/recovery/start-broker.sh"]
+  mem_limit: 1g
+  cpus: 1.0
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+    interval: 15s
+    timeout: 10s
+    retries: 15
+    start_period: 30s
+
+x-broker-env: &broker-env
+  CLUSTER_ID: ${CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+  KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
+  PROCESS_ROLES: broker,controller
+  LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+
+services:
+  broker-1:
+    <<: *broker
+    hostname: broker-1
+    environment:
+      <<: *broker-env
+      BROKER_ID: 1
+      BROKER_RACK: zone-a
+      EXTERNAL_PORT: 19092
+    ports: ["127.0.0.1:19092:9094"]
+    volumes:
+      - broker-1-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-a, backbone]
+  broker-2:
+    <<: *broker
+    hostname: broker-2
+    environment:
+      <<: *broker-env
+      BROKER_ID: 2
+      BROKER_RACK: zone-b
+      EXTERNAL_PORT: 19093
+    ports: ["127.0.0.1:19093:9094"]
+    volumes:
+      - broker-2-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-b, backbone]
+  broker-3:
+    <<: *broker
+    hostname: broker-3
+    environment:
+      <<: *broker-env
+      BROKER_ID: 3
+      BROKER_RACK: zone-c
+      EXTERNAL_PORT: 19094
+    ports: ["127.0.0.1:19094:9094"]
+    volumes:
+      - broker-3-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-c, backbone]
+  broker-4:
+    <<: *broker
+    hostname: broker-4
+    environment:
+      <<: *broker-env
+      BROKER_ID: 4
+      BROKER_RACK: zone-a
+      EXTERNAL_PORT: 19095
+      PROCESS_ROLES: broker
+      LISTENERS: INTERNAL://:9092,EXTERNAL://:9094
+    ports: ["127.0.0.1:19095:9094"]
+    volumes:
+      - broker-4-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-a, backbone]
+  broker-5:
+    <<: *broker
+    hostname: broker-5
+    profiles: [final]
+    environment:
+      <<: *broker-env
+      BROKER_ID: 5
+      BROKER_RACK: zone-b
+      EXTERNAL_PORT: 19096
+      PROCESS_ROLES: broker
+      LISTENERS: INTERNAL://:9092,EXTERNAL://:9094
+    ports: ["127.0.0.1:19096:9094"]
+    volumes:
+      - broker-5-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-b, backbone]
+  broker-6:
+    <<: *broker
+    hostname: broker-6
+    profiles: [final]
+    environment:
+      <<: *broker-env
+      BROKER_ID: 6
+      BROKER_RACK: zone-c
+      EXTERNAL_PORT: 19097
+      PROCESS_ROLES: broker
+      LISTENERS: INTERNAL://:9092,EXTERNAL://:9094
+    ports: ["127.0.0.1:19097:9094"]
+    volumes:
+      - broker-6-data:/var/lib/kafka/data
+      - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
+      - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+    networks: [zone-c, backbone]
+  cruise-control:
+    image: replica-recovery-cruise-control:baseline
+    build:
+      context: ..
+      dockerfile: infrastructure/cruise-control/Dockerfile
+      target: runtime
+    ports: ["127.0.0.1:${CRUISE_CONTROL_PORT:-9090}:9090"]
+    mem_limit: 1g
+    cpus: 1.0
+    volumes:
+      - ./cruise-control/cruisecontrol.properties:/opt/cruise-control/config/cruisecontrol.properties:ro
+      - ./cruise-control/capacity.json:/opt/cruise-control/config/capacity.json:ro
+    depends_on:
+      broker-1: {condition: service_healthy}
+      broker-2: {condition: service_healthy}
+      broker-3: {condition: service_healthy}
+      broker-4: {condition: service_healthy}
+    networks: [backbone]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9090; printf \"GET /kafkacruisecontrol/state?json=true HTTP/1.0\\r\\n\\r\\n\" >&3; head -1 <&3 | grep -q 200'"]
+      interval: 15s
+      timeout: 15s
+      retries: 15
+      start_period: 30s
+
+networks:
+  backbone:
+  zone-a: {name: recovery-zone-a}
+  zone-b: {name: recovery-zone-b}
+  zone-c: {name: recovery-zone-c}
+
+volumes:
+  broker-1-data:
+  broker-2-data:
+  broker-3-data:
+  broker-4-data:
+  broker-5-data:
+  broker-6-data:
