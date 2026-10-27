@@ -1,0 +1,5 @@
+infrastructure/*.yml text eol=lf
+infrastructure/**/*.sh text eol=lf
+infrastructure/**/*.template text eol=lf
+infrastructure/**/Dockerfile text eol=lf
+experiment-platform/gradlew text eol=lf
