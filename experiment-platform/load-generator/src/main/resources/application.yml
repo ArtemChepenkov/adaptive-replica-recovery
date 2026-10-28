@@ -1,0 +1,12 @@
+server:
+  address: 127.0.0.1
+  port: ${LOAD_HTTP_PORT:8081}
+spring:
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      write-durations-as-timestamps: false
+load:
+  bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092,localhost:19093,localhost:19094,localhost:19095}
+  topic: ${KAFKA_LOAD_TOPIC:recovery-data}
+  output-directory: ${LOAD_OUTPUT_DIRECTORY:../results/load}

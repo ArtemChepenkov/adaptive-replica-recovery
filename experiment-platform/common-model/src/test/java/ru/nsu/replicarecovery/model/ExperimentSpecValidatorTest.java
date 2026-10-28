@@ -57,6 +57,16 @@ class ExperimentSpecValidatorTest {
   }
 
   @Test
+  void rejectsNonFiniteSloThresholds() {
+    assertThatThrownBy(() -> ExperimentSpecValidator.validateSlo(
+        new SloSpec(Double.POSITIVE_INFINITY, 0.01, Duration.ofMinutes(1), 100)))
+        .hasMessageContaining("produceP99Ms");
+    assertThatThrownBy(() -> ExperimentSpecValidator.validateSlo(
+        new SloSpec(100, 0.01, Duration.ofMinutes(1), Double.POSITIVE_INFINITY)))
+        .hasMessageContaining("maxViolationAreaMsSeconds");
+  }
+
+  @Test
   void rejectsInvalidSlo() {
     ExperimentSpec valid = Fixtures.validSpec();
     SloSpec slo = new SloSpec(0, 1.1, Duration.ZERO, -1);

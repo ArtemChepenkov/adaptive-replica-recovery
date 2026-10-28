@@ -10,4 +10,9 @@ public record RequestObservation(
     boolean success,
     String errorClass,
     int bytes) {
+  public RequestObservation {
+    if (completedAt == null || sequence < 0 || latencyMicros < 0 || bytes < 0) {
+      throw new IllegalArgumentException("timestamp and non-negative observation values are required");
+    }
+  }
 }

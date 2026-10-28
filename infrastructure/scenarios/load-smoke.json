@@ -1,0 +1,41 @@
+{
+  "load": {
+    "mode": "STEP",
+    "messageSizeBytes": 1024,
+    "schedule": [
+      {"duration": "PT15S", "requestsPerSecond": 100},
+      {"duration": "PT15S", "requestsPerSecond": 250}
+    ]
+  },
+  "slo": {
+    "produceP99Ms": 100,
+    "maxErrorRate": 0.01,
+    "maxViolationTime": "PT2M",
+    "maxViolationAreaMsSeconds": 1000
+  },
+  "recovery": {
+    "throttlePolicy": "AIMD",
+    "adaptiveThrottleEnabled": true,
+    "riskOrderingEnabled": true,
+    "initialThrottleMiBps": 20,
+    "minThrottleMiBps": 1,
+    "maxThrottleMiBps": 100,
+    "additiveStepMiBps": 5,
+    "maxChangeMiBps": 20,
+    "multiplicativeDecrease": 0.7,
+    "controlInterval": "PT10S",
+    "metricsWindow": "PT60S",
+    "staleGrace": "PT30S",
+    "safeFallbackThrottleMiBps": 10,
+    "healthySloRatio": 0.85,
+    "healthyWindows": 2,
+    "minimumObservations": 100,
+    "cooldown": "PT20S",
+    "progressFloorMiBps": 5,
+    "minProgressMiBps": 1,
+    "noProgressWindows": 3,
+    "requiredCopies": 3,
+    "requiredDomains": 3
+  },
+  "seed": 20260910
+}

@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -23,6 +24,11 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
   private final Supplier<MessagePublisher> publishers;
   private final Consumer<RequestObservation> observations;
   private final ScheduledExecutorService scheduler;
+  private final ExecutorService finisher = Executors.newSingleThreadExecutor(action -> {
+    Thread thread = new Thread(action, "open-loop-load-finish");
+    thread.setDaemon(true);
+    return thread;
+  });
   private final LongSupplier nanoTime;
   private final Clock clock;
   private final Duration drainTimeout;
@@ -31,11 +37,16 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
 
   public OpenLoopLoadEngine(
       Supplier<MessagePublisher> publishers, Consumer<RequestObservation> observations) {
+    this(publishers, observations, Clock.systemUTC());
+  }
+
+  public OpenLoopLoadEngine(Supplier<MessagePublisher> publishers,
+      Consumer<RequestObservation> observations, Clock clock) {
     this(publishers, observations, Executors.newSingleThreadScheduledExecutor(action -> {
       Thread thread = new Thread(action, "open-loop-load");
       thread.setDaemon(true);
       return thread;
-    }), System::nanoTime, Clock.systemUTC(), Duration.ofSeconds(10));
+    }), System::nanoTime, clock, Duration.ofSeconds(10));
   }
 
   // Virtual scheduling and short drain deadlines keep unit tests independent of wall time.
@@ -86,12 +97,14 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
       }
       stopScheduling(run);
     }
-    CompletableFuture.runAsync(() -> finish(run));
+    requestFinish(run);
     try {
       long remaining = Math.max(0, drainTimeout.toNanos() - (System.nanoTime() - stopStarted));
       run.completion.get(remaining, TimeUnit.NANOSECONDS);
     } catch (TimeoutException exception) {
-      throw new IllegalStateException("load did not finish before stop deadline", exception);
+      IllegalStateException failure = new IllegalStateException("load did not finish before stop deadline", exception);
+      run.failure = failure;
+      throw failure;
     } catch (InterruptedException exception) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("interrupted while stopping the load", exception);
@@ -103,12 +116,16 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
   @Override
   public void close() {
     synchronized (this) {
+      if (closed) {
+        return;
+      }
       closed = true;
     }
     try {
       stop();
     } finally {
       scheduler.shutdownNow();
+      finisher.shutdown();
     }
   }
 
@@ -120,7 +137,7 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
     } catch (RuntimeException exception) {
       run.failure = exception;
       stopScheduling(run);
-      CompletableFuture.runAsync(() -> finish(run));
+      requestFinish(run);
     }
   }
 
@@ -132,7 +149,7 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
     if (deadline == run.schedule.duration().toNanos()) {
       stopScheduling(run);
       // Draining must not block the scheduling thread or Kafka's callback thread.
-      CompletableFuture.runAsync(() -> finish(run));
+      requestFinish(run);
       return;
     }
     long sequence = run.sequence++;
@@ -163,7 +180,7 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
         run.failure = exception;
         stopScheduling(run);
       }
-      CompletableFuture.runAsync(() -> finish(run));
+      requestFinish(run);
     } finally {
       run.pending.remove(sequence, request);
       synchronized (run.drainMonitor) {
@@ -181,10 +198,16 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
     }
   }
 
-  private void finish(Run run) {
-    if (!run.finishing.compareAndSet(false, true)) {
+  private void requestFinish(Run run) {
+    if (run.completion.isDone() || !run.finishRequested.compareAndSet(false, true)) {
       return;
     }
+    // A dedicated executor prevents ForkJoinPool timed waits from executing a
+    // blocking close inline via CompletableFuture's helpAsyncBlocker path.
+    finisher.execute(() -> finish(run));
+  }
+
+  private void finish(Run run) {
     boolean interrupted = false;
     try {
       long started = System.nanoTime();
@@ -244,7 +267,7 @@ public final class OpenLoopLoadEngine implements AutoCloseable {
     final long startedAt;
     final ConcurrentHashMap<Long, Pending> pending = new ConcurrentHashMap<>();
     final Object drainMonitor = new Object();
-    final AtomicBoolean finishing = new AtomicBoolean();
+    final AtomicBoolean finishRequested = new AtomicBoolean();
     final CompletableFuture<Void> completion = new CompletableFuture<>();
     volatile RuntimeException failure;
     volatile boolean publisherClosed;
