@@ -55,7 +55,15 @@ bash infrastructure/scripts/lab-down.sh
 
 Ядро генератора нагрузки реализовано в Task 3: расписание, асинхронные отправки
 и остановка. Проверка из `experiment-platform`: `bash ./gradlew :load-generator:test`.
-HTTP API и журнал измерений добавляются в Task 4.
+В Task 4 добавлены HTTP API и CSV-журнал измерений.
+
+Из `experiment-platform` запустите `bash ./gradlew :load-generator:bootRun`.
+Статус: `http://localhost:8081/api/load/status`, метрики:
+`http://localhost:8081/api/load/metrics/current`.
+При работающих Kafka и API проверка из корня проекта:
+`bash infrastructure/tests/load-api-smoke.sh`.
+Команды ручного запуска нагрузки и описание результатов:
+[Task 4 — метрики и HTTP API](docs/implementation/task-04-load-metrics-and-http-api.md).
 
 ## Документация
 

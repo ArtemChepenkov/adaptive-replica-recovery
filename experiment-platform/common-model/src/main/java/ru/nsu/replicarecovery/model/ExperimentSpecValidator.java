@@ -17,19 +17,20 @@ public final class ExperimentSpecValidator {
     validateFault(spec.fault(), spec.timeout());
   }
 
-  private static void validateSlo(SloSpec slo) {
+  public static void validateSlo(SloSpec slo) {
     require(slo != null, "slo must not be null");
     require(slo.produceP99Ms() > 0, "produceP99Ms must be positive");
+    require(Double.isFinite(slo.produceP99Ms()), "produceP99Ms must be finite");
     require(
         slo.maxErrorRate() >= 0 && slo.maxErrorRate() <= 1,
         "maxErrorRate must be between 0 and 1");
     requirePositive(slo.maxViolationTime(), "maxViolationTime must be positive");
     require(
-        slo.maxViolationAreaMsSeconds() >= 0,
+        Double.isFinite(slo.maxViolationAreaMsSeconds()) && slo.maxViolationAreaMsSeconds() >= 0,
         "maxViolationAreaMsSeconds must not be negative");
   }
 
-  private static void validateLoad(LoadSpec load) {
+  public static void validateLoad(LoadSpec load) {
     require(load != null, "load must not be null");
     require(load.mode() != null, "load mode must not be null");
     require(load.messageSizeBytes() > 0, "messageSizeBytes must be positive");
@@ -42,7 +43,7 @@ public final class ExperimentSpecValidator {
     }
   }
 
-  private static void validateRecovery(RecoverySpec recovery) {
+  public static void validateRecovery(RecoverySpec recovery) {
     require(recovery != null, "recovery must not be null");
     requireNotBlank(recovery.throttlePolicy(), "throttlePolicy must not be blank");
     require(recovery.minThrottleMiBps() > 0, "minThrottleMiBps must be positive");

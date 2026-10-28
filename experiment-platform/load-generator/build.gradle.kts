@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.spring.dependency.management)
 }
 
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir(rootProject.projectDir)
+}
+
 dependencies {
     implementation(project(":common-model"))
     implementation(libs.spring.boot.starter.web)

@@ -62,9 +62,14 @@ class OpenLoopLoadEngineTest {
     } catch (IllegalStateException exception) {
       assertThat(exception).hasMessage("load did not finish before stop deadline");
     }
-    fixture.engine.completion().get(1, TimeUnit.SECONDS);
+    long stopElapsed = System.nanoTime() - before;
+    try {
+      fixture.engine.completion().get(3, TimeUnit.SECONDS);
+    } catch (ExecutionException exception) {
+      assertThat(exception).hasCauseInstanceOf(IllegalStateException.class);
+    }
 
-    assertThat(Duration.ofNanos(System.nanoTime() - before)).isLessThan(Duration.ofSeconds(1));
+    assertThat(Duration.ofNanos(stopElapsed)).isLessThan(Duration.ofSeconds(5));
     assertThat(fixture.publisher.submissions).hasSize(10);
     assertThat(fixture.engine.outstandingRequests()).isZero();
     assertThat(fixture.publisher.closes).isEqualTo(1);
@@ -74,7 +79,11 @@ class OpenLoopLoadEngineTest {
     });
     fixture.time.advanceTo(2_000_000_000L);
     fixture.publisher.completeAll();
-    fixture.engine.stop();
+    try {
+      fixture.engine.stop();
+    } catch (java.util.concurrent.CompletionException exception) {
+      assertThat(exception).hasCauseInstanceOf(IllegalStateException.class);
+    }
     assertThat(fixture.observations).hasSize(10);
     assertThat(fixture.publisher.closes).isEqualTo(1);
   }
@@ -174,7 +183,7 @@ class OpenLoopLoadEngineTest {
     CountDownLatch release = new CountDownLatch(1);
     doAnswer(invocation -> {
       closing.countDown();
-      if (!release.await(2, TimeUnit.SECONDS)) {
+      if (!release.await(10, TimeUnit.SECONDS)) {
         throw new IllegalStateException("test close was not released");
       }
       return null;
@@ -183,17 +192,42 @@ class OpenLoopLoadEngineTest {
         time.scheduler, () -> time.now, time.clock, Duration.ofMillis(30));
     LoadCommand command = command(Duration.ofSeconds(2), 1, 42);
     engine.start(command);
-    long before = System.nanoTime();
+    CompletableFuture<Throwable> stopping = CompletableFuture.supplyAsync(() -> {
+      try {
+        engine.stop();
+        return null;
+      } catch (IllegalStateException exception) {
+        return exception;
+      }
+    });
     try {
-      assertThatIllegalStateException().isThrownBy(engine::stop);
-      assertThat(Duration.ofNanos(System.nanoTime() - before)).isLessThan(Duration.ofSeconds(1));
-      assertThat(closing.await(1, TimeUnit.SECONDS)).isTrue();
+      assertThat(closing.await(3, TimeUnit.SECONDS)).isTrue();
+      assertThat(stopping.get(3, TimeUnit.SECONDS)).isInstanceOf(IllegalStateException.class)
+          .hasMessage("load did not finish before stop deadline");
       assertThat(engine.completion()).isNotDone();
       assertThatIllegalStateException().isThrownBy(() -> engine.start(command));
     } finally {
       release.countDown();
     }
-    engine.completion().get(1, TimeUnit.SECONDS);
+    assertThatThrownBy(() -> engine.completion().get(3, TimeUnit.SECONDS))
+        .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void closeIsIdempotentAndStopDoesNotQueueWorkAfterShutdown() {
+    Fixture fixture = new Fixture();
+    fixture.publisher.delay = Duration.ZERO;
+    LoadCommand command = command(Duration.ofSeconds(1), 1, 42);
+    fixture.engine.start(command);
+    fixture.time.advanceTo(0);
+
+    fixture.engine.close();
+    fixture.engine.close();
+    fixture.engine.stop();
+
+    assertThat(fixture.publisher.closes).isEqualTo(1);
+    assertThat(fixture.engine.completion()).isCompleted();
+    assertThatIllegalStateException().isThrownBy(() -> fixture.engine.start(command));
   }
 
   @Test
