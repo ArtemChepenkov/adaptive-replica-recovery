@@ -67,6 +67,12 @@ bash infrastructure/scripts/lab-down.sh
 
 ## Документация
 
+Фундамент Runner реализован в Task 5: YAML-конфигурации, состояния, файловое
+хранилище, summary и обработка незавершённых запусков после рестарта.
+Проверка из `experiment-platform`: `bash ./gradlew :experiment-runner:test`.
+HTTP API Runner и настоящий адаптер стенда добавляются в Task 6.
+[Описание и демонстрационный результат Task 5](docs/implementation/task-05-runner-state-and-result-store.md).
+
 - [Отчёты по реализации задач](docs/implementation/README.md). После каждой задачи отчёт сохраняется в `docs/implementation/`.
 - [Спецификация](docs/superpowers/specs/2026-09-10-adaptive-replica-recovery-design.md)
 - [План реализации](docs/superpowers/plans/2026-09-10-adaptive-replica-recovery.md)
