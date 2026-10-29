@@ -13,6 +13,7 @@ spring-boot-starter-thymeleaf = { module = "org.springframework.boot:spring-boot
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafka" }
 hdrhistogram = { module = "org.hdrhistogram:HdrHistogram", version.ref = "hdrhistogram" }
+jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml" }
 wiremock = { module = "org.wiremock:wiremock", version.ref = "wiremock" }
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
