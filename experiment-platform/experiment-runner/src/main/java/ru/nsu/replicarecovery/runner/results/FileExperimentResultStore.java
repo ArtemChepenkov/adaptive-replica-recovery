@@ -269,6 +269,43 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
     });
   }
 
+  @Override
+  public List<ExperimentMetricRow> metrics(String id) {
+    return locked(id, () -> { readRecord(id); return List.copyOf(readMetrics(id)); });
+  }
+
+  @Override
+  public List<Map<String, Object>> events(String id) {
+    return readJournal(id, "events.log");
+  }
+
+  @Override
+  public List<Map<String, Object>> decisions(String id) {
+    return readJournal(id, "decisions.jsonl");
+  }
+
+  @Override
+  public ExperimentSummary summary(String id) {
+    return locked(id, () -> {
+      ExperimentRecord record = readRecord(id);
+      if (!record.terminal()) throw new IllegalStateException("summary is not final yet");
+      return io(() -> json.readValue(directory(id).resolve("summary.json").toFile(), ExperimentSummary.class));
+    });
+  }
+
+  private List<Map<String, Object>> readJournal(String id, String filename) {
+    return locked(id, () -> {
+      readRecord(id);
+      return io(() -> {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (String line : Files.readAllLines(directory(id).resolve(filename), StandardCharsets.UTF_8)) {
+          entries.add(json.readValue(line, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
+        }
+        return List.copyOf(entries);
+      });
+    });
+  }
+
   private ExperimentRecord saveState(ExperimentRecord record, ExperimentState next,
       ExperimentOutcome outcome, String reason) {
     Instant timestamp = now(record);

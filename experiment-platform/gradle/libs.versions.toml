@@ -15,6 +15,7 @@ kafka-clients = { module = "org.apache.kafka:kafka-clients", version.ref = "kafk
 hdrhistogram = { module = "org.hdrhistogram:HdrHistogram", version.ref = "hdrhistogram" }
 jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml" }
 wiremock = { module = "org.wiremock:wiremock", version.ref = "wiremock" }
+wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
 testcontainers-kafka = { module = "org.testcontainers:kafka" }

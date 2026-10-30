@@ -1,0 +1,24 @@
+# Intended for Runner profile test-lab: no physical Kafka fault or recovery is performed.
+schemaVersion: 1
+name: simulated-runner-smoke
+timeout: 30s
+slo:
+  produceP99Ms: 100
+  maxErrorRate: 0.01
+load:
+  mode: CONSTANT
+  messageSizeBytes: 1024
+  schedule:
+    - duration: 30s
+      requestsPerSecond: 100
+recovery:
+  throttlePolicy: AIMD
+  initialThrottleMiBps: 20
+  minThrottleMiBps: 1
+  maxThrottleMiBps: 100
+resources:
+  profile: test-lab-only
+fault:
+  action: STOP_BROKER
+  target: broker-2
+  at: 1s

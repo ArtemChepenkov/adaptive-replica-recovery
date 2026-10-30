@@ -11,7 +11,7 @@ dependencies {
     implementation(libs.jackson.dataformat.yaml)
 
     testImplementation(libs.spring.boot.starter.test)
-    testImplementation(libs.wiremock)
+    testImplementation(libs.wiremock.standalone)
     testImplementation(platform(libs.testcontainers.bom))
     testImplementation(libs.testcontainers.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

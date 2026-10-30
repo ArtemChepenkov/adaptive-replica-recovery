@@ -3,3 +3,9 @@ server:
   port: ${RUNNER_HTTP_PORT:8080}
 runner:
   results-directory: ${RUNNER_RESULTS_DIRECTORY:../results}
+  scenarios-directory: ${RUNNER_SCENARIOS_DIRECTORY:../infrastructure/scenarios}
+  poll-interval: ${RUNNER_POLL_INTERVAL:1s}
+  cleanup-timeout: ${RUNNER_CLEANUP_TIMEOUT:30s}
+  load-url: ${LOAD_GENERATOR_URL:http://localhost:8081}
+  cruise-url: ${CRUISE_CONTROL_URL:http://localhost:9090}
+  prometheus-url: ${PROMETHEUS_URL:http://localhost:9091}

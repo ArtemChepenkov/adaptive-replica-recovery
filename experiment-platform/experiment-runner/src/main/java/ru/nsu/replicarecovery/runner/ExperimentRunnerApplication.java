@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import ru.nsu.replicarecovery.runner.lab.LabController;
 import ru.nsu.replicarecovery.runner.lifecycle.RestartRecovery;
+import ru.nsu.replicarecovery.runner.lifecycle.ExperimentCoordinator;
 import ru.nsu.replicarecovery.runner.results.ExperimentResultStore;
 import ru.nsu.replicarecovery.runner.results.FileExperimentResultStore;
 
@@ -27,11 +28,20 @@ public class ExperimentRunnerApplication {
   @Bean
   @ConditionalOnMissingBean(LabController.class)
   LabController unavailableLabController() {
-    return () -> { throw new IllegalStateException("Lab adapter is not configured; implemented in Task 6"); };
+    return () -> { throw new IllegalStateException("Lab adapter is not configured; DockerLabController is implemented in Task 9"); };
   }
 
   @Bean
-  SmartInitializingSingleton recoverInterruptedExperiments(ExperimentResultStore store, LabController lab) {
-    return () -> new RestartRecovery(store, lab).recover();
+  SmartInitializingSingleton recoverInterruptedExperiments(ExperimentResultStore store, ExperimentCoordinator coordinator) {
+    return () -> {
+      new RestartRecovery(store, coordinator::reset).recover();
+      // A FAILED run is terminal, but an unsuccessful cleanup is not a ready lab.
+      // Reverify it on every boot without rewriting the immutable old result.
+      boolean unverified = store.list().stream().filter(record -> record.terminal())
+          .anyMatch(record -> !store.summary(record.id()).cleanup().success());
+      if (unverified && !coordinator.reset().success()) {
+        throw new IllegalStateException("previous cleanup is still unverified; reset required");
+      }
+    };
   }
 }

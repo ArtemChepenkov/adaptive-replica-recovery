@@ -70,8 +70,13 @@ bash infrastructure/scripts/lab-down.sh
 Фундамент Runner реализован в Task 5: YAML-конфигурации, состояния, файловое
 хранилище, summary и обработка незавершённых запусков после рестарта.
 Проверка из `experiment-platform`: `bash ./gradlew :experiment-runner:test`.
-HTTP API Runner и настоящий адаптер стенда добавляются в Task 6.
+HTTP API и координатор Runner реализованы в Task 6. Профиль `test-lab` проверяет
+полный цикл без физических отказов; настоящий DockerLabController относится к Task 9.
 [Описание и демонстрационный результат Task 5](docs/implementation/task-05-runner-state-and-result-store.md).
+
+Сборка Runner: `bash ./gradlew :experiment-runner:bootJar` из `experiment-platform`.
+Для имитационного запуска используйте `--spring.profiles.active=test-lab`.
+[Task 6 — запуск API и проверка](docs/implementation/task-06-experiment-orchestration-api.md).
 
 - [Отчёты по реализации задач](docs/implementation/README.md). После каждой задачи отчёт сохраняется в `docs/implementation/`.
 - [Спецификация](docs/superpowers/specs/2026-09-10-adaptive-replica-recovery-design.md)
