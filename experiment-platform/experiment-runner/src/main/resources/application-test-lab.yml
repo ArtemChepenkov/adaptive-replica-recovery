@@ -1,0 +1,2 @@
+runner:
+  results-directory: ${RUNNER_RESULTS_DIRECTORY:../results/test-lab}

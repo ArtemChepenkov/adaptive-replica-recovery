@@ -24,5 +24,9 @@ public interface ExperimentResultStore {
   void appendMetric(String id, ExperimentMetricRow row);
   void appendDecision(String id, Map<String, ?> decision);
   void appendEvent(String id, String source, String severity, String message);
+  List<ExperimentMetricRow> metrics(String id);
+  List<Map<String, Object>> events(String id);
+  List<Map<String, Object>> decisions(String id);
+  ExperimentSummary summary(String id);
   ExperimentSummary finish(String id, CleanupResult cleanup);
 }
