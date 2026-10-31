@@ -46,6 +46,7 @@ class ExperimentCoordinatorTest {
       assertThat(fixture.store.get(accepted.id()).recoveryFinishedAt()).isNotNull();
       assertThat(fixture.store.get(accepted.id()).measurementEndedAt()).isBeforeOrEqualTo(done.updatedAt());
       assertThat(coordinator.stop(accepted.id()).state()).isEqualTo(ExperimentState.COMPLETED);
+      assertThat(coordinator.summary(accepted.id())).isEqualTo(fixture.store.summary(accepted.id()));
     }
   }
 
@@ -71,6 +72,7 @@ class ExperimentCoordinatorTest {
     })) {
       var id = coordinator.start(spec()).id();
       assertThat(waiting.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThatThrownBy(() -> coordinator.summary(id)).isInstanceOf(ExperimentCoordinator.ResultNotReadyException.class);
       assertThatThrownBy(() -> coordinator.start(spec())).isInstanceOf(ExperimentCoordinator.BusyException.class);
       coordinator.stop(id);
       assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.CANCELLED);

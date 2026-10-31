@@ -34,6 +34,7 @@ import ru.nsu.replicarecovery.runner.domain.ExperimentRecord;
 import ru.nsu.replicarecovery.runner.lab.CleanupResult;
 import ru.nsu.replicarecovery.runner.lifecycle.ExperimentCoordinator;
 import ru.nsu.replicarecovery.runner.results.ExperimentMetricRow;
+import ru.nsu.replicarecovery.runner.results.SummaryCalculator;
 
 class ExperimentApiControllerTest {
   private static final String YAML = """
@@ -167,6 +168,28 @@ class ExperimentApiControllerTest {
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
         .andReturn().getResponse().getContentAsString();
     assertThat(body).doesNotContain("private filesystem path");
+  }
+
+  @Test
+  void returnsStoredSummaryWithoutRecomputingMetricsAndReportsPendingOrUnknownResult() throws Exception {
+    var completed = record(ExperimentState.COMPLETED);
+    var summary = new SummaryCalculator().calculate(completed, List.of(),
+        completed.createdAt().plusSeconds(1), ExperimentOutcome.COMPLETED, "TEST", CleanupResult.ok())
+        .withFilesComplete(true);
+    when(coordinator.summary("run-001")).thenReturn(summary);
+    mvc.perform(get("/api/experiments/run-001/summary"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.experimentId").value("run-001"))
+        .andExpect(jsonPath("$.finalState").value("COMPLETED"))
+        .andExpect(jsonPath("$.filesComplete").value(true))
+        .andExpect(jsonPath("$.produceP99Ms").isEmpty());
+    when(coordinator.summary("run-001")).thenThrow(new ExperimentCoordinator.ResultNotReadyException());
+    mvc.perform(get("/api/experiments/run-001/summary"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.detail").value("Experiment results are not final yet"));
+    when(coordinator.summary("missing")).thenThrow(new ExperimentCoordinator.UnknownExperimentException("missing"));
+    mvc.perform(get("/api/experiments/missing/summary"))
+        .andExpect(status().isNotFound());
+    mvc.perform(get("/api/experiments/bad.id/summary"))
+        .andExpect(status().isBadRequest());
   }
 
   private ExperimentRecord record(ExperimentState state) {
