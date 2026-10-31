@@ -108,6 +108,10 @@ public final class ExperimentCoordinator implements AutoCloseable {
   public List<ExperimentMetricRow> metrics(String id) { get(id); return store.metrics(id); }
   public List<Map<String, Object>> events(String id) { get(id); return store.events(id); }
   public List<Map<String, Object>> decisions(String id) { get(id); return store.decisions(id); }
+  public ExperimentSummary summary(String id) {
+    if (!get(id).terminal()) throw new ResultNotReadyException();
+    return store.summary(id);
+  }
 
   public ExperimentRecord stop(String id) {
     ExperimentRecord record = get(id);
@@ -375,6 +379,9 @@ public final class ExperimentCoordinator implements AutoCloseable {
   @FunctionalInterface public interface Pause { void await(Duration duration) throws InterruptedException; }
   public static class BusyException extends RuntimeException { public BusyException(String message) { super(message); } }
   public static class UnknownExperimentException extends RuntimeException { public UnknownExperimentException(String id) { super("unknown experiment: " + id); } }
+  public static class ResultNotReadyException extends RuntimeException {
+    public ResultNotReadyException() { super("experiment results are not final yet"); }
+  }
   private static final class RunAborted extends RuntimeException { RunAborted(String reason) { super(reason); } }
   private static final class Run {
     final ExperimentRecord record;

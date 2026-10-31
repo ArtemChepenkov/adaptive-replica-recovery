@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Наблюдение · Replica Recovery</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <script defer src="/vendor/chart.umd.js"></script>
+  <script defer src="/js/ui.js"></script>
+  <script defer src="/js/active-experiment.js"></script>
+</head>
+<body th:attr="data-experiment-id=${experimentId},data-simulated=${simulated}">
+<header class="topbar"><a class="brand" href="/">REPLICA RECOVERY <span>EXPERIMENT RUNNER</span></a><a href="/" class="nav-link">Все запуски</a></header>
+<main>
+  <div class="page-heading"><div><p class="eyebrow">Наблюдение за опытом</p><h1 id="experiment-name">Эксперимент</h1><p class="mono muted" id="experiment-id" th:text="${experimentId}"></p></div><div class="button-row"><a id="results-link" class="button secondary" th:href="@{/experiments/{id}/results(id=${experimentId})}" hidden>Результаты</a><button id="stop-button" class="danger" type="button">Остановить</button></div></div>
+  <p id="simulation-notice" class="notice" th:hidden="${!simulated}"><strong>TEST-LAB · Имитация</strong> Показатели искусственные. Физические отказ и восстановление не выполняются.</p>
+  <noscript><p class="alert">Для обновления показателей и остановки нужен JavaScript.</p></noscript>
+  <p id="poll-error" class="alert" role="alert" hidden></p><p id="stop-error" class="alert" role="alert" hidden></p>
+  <div class="status-grid">
+    <section class="stat"><span>Состояние опыта</span><strong id="experiment-state">Загрузка…</strong><small id="update-time">Обновление раз в секунду</small></section>
+    <section class="stat"><span>Состояние ограничений</span><strong id="constraint-state">нет данных</strong><small>Из последнего решения контроллера</small></section>
+    <section class="stat"><span>Скорость восстановления</span><strong id="current-throttle">нет данных</strong><small>Лимит репликации, МиБ/с</small></section>
+    <section class="stat"><span>Осталось восстановить</span><strong id="current-remaining">нет данных</strong><small id="current-progress">Скорость сокращения отставания: нет данных</small></section>
+  </div>
+  <div class="charts-grid">
+    <section class="panel chart-panel"><div class="section-heading"><h2>Задержка записи p99</h2><span class="step-label">мс</span></div><div class="chart-wrap"><canvas id="latency-chart" aria-label="График p99 и пользовательского SLO" role="img"></canvas></div></section>
+    <section class="panel chart-panel"><div class="section-heading"><h2>Лимит репликации</h2><span class="step-label">МиБ/с</span></div><div class="chart-wrap"><canvas id="throttle-chart" aria-label="График лимита репликации" role="img"></canvas></div></section>
+    <section class="panel chart-panel"><div class="section-heading"><h2>Оставшиеся данные</h2><span class="step-label">МиБ</span></div><div class="chart-wrap"><canvas id="remaining-chart" aria-label="График оставшихся данных" role="img"></canvas></div></section>
+    <section class="panel chart-panel"><div class="section-heading"><h2>Ошибки записи</h2><span class="step-label">% запросов</span></div><div class="chart-wrap"><canvas id="error-chart" aria-label="График доли ошибок и ограничения SLO" role="img"></canvas></div></section>
+  </div>
+  <div class="details-grid">
+    <section class="panel"><h2>Последнее решение</h2><p id="last-decision" class="decision">Решений пока нет.</p><p class="field-hint">Решения контроллера и опрос интерфейса имеют разные интервалы.</p></section>
+    <section class="panel"><h2>Предупреждения</h2><p id="warnings" class="warning-text">Предупреждений пока нет.</p><p id="run-reason" class="field-hint"></p></section>
+  </div>
+  <section class="panel"><div class="section-heading"><h2>События</h2><span class="step-label">Журнал опыта</span></div><div class="table-scroll"><table><thead><tr><th>Время</th><th>Источник</th><th>Уровень</th><th>Сообщение</th></tr></thead><tbody id="events"></tbody></table></div><p id="events-empty" class="empty">Событий пока нет.</p></section>
+</main>
+<footer>Отсутствующие измерения показываются как «нет данных»</footer>
+</body>
+</html>

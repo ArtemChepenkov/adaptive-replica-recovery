@@ -24,6 +24,7 @@ import ru.nsu.replicarecovery.runner.domain.ExperimentRecord;
 import ru.nsu.replicarecovery.runner.lab.CleanupResult;
 import ru.nsu.replicarecovery.runner.lifecycle.ExperimentCoordinator;
 import ru.nsu.replicarecovery.runner.results.ExperimentMetricRow;
+import ru.nsu.replicarecovery.runner.results.ExperimentSummary;
 
 @RestController
 @RequestMapping("/api")
@@ -82,6 +83,18 @@ public class ExperimentApiController {
   @GetMapping("/profiles")
   public List<ScenarioCatalog.Profile> profiles() {
     return scenarios.profiles();
+  }
+
+  @GetMapping("/experiments/{id}/summary")
+  public ExperimentSummary summary(@PathVariable String id) {
+    validateId(id);
+    return coordinator.summary(id);
+  }
+
+  @ExceptionHandler(ExperimentCoordinator.ResultNotReadyException.class)
+  public ResponseEntity<ProblemDetail> pendingResult() {
+    return problem(HttpStatus.CONFLICT, ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+        "Experiment results are not final yet"));
   }
 
   @PostMapping("/lab/reset")

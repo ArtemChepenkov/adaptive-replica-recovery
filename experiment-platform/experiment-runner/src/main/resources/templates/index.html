@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Запуск эксперимента · Replica Recovery</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <script defer src="/vendor/js-yaml.min.js"></script>
+  <script defer src="/js/ui.js"></script>
+  <script defer src="/js/start-experiment.js"></script>
+</head>
+<body th:attr="data-simulated=${simulated}">
+<header class="topbar"><a class="brand" href="/">REPLICA RECOVERY <span>EXPERIMENT RUNNER</span></a><span class="local-label">Локальный стенд</span></header>
+<main>
+  <div class="page-heading"><div><p class="eyebrow">Управление экспериментами</p><h1>Запустить эксперимент</h1><p class="muted">Выберите сценарий, задайте пользовательские ограничения и запустите один опыт.</p></div><span class="badge">01 / Запуск</span></div>
+  <p class="notice" th:if="${simulated}"><strong>TEST-LAB · Имитация</strong> Kafka и Docker не изменяются. Показатели искусственные и не оценивают эффективность метода.</p>
+  <noscript><p class="alert">Для запуска и наблюдения нужен JavaScript. Также доступны CLI-скрипты.</p></noscript>
+  <div class="launch-grid">
+    <section class="panel">
+      <div class="section-heading"><h2>Параметры опыта</h2><span class="step-label">YAML → REST API</span></div>
+      <form id="experiment-form">
+        <label for="scenario">Сценарий YAML</label>
+        <select id="scenario" name="scenario" required disabled><option value="">Загрузка сценариев…</option></select>
+        <p id="scenario-description" class="field-hint">Сценарии из каталога Runner.</p>
+        <div class="field-pair">
+          <div><label for="produce-p99">Предел p99, мс</label><input id="produce-p99" name="produceP99Ms" type="number" min="0" step="any" required></div>
+          <div><label for="error-rate">Максимальная доля ошибок</label><input id="error-rate" name="maxErrorRate" type="number" min="0" max="1" step="any" required><p class="field-hint">0,01 = 1 % запросов</p></div>
+        </div>
+        <label for="seed">Seed</label><input id="seed" name="seed" type="number" step="1" min="-9007199254740991" max="9007199254740991" required>
+        <p class="field-hint">Фиксируйте seed для повторяемого сценария.</p>
+        <p id="start-error" class="alert" role="alert" hidden></p>
+        <div class="form-actions"><button id="start-button" type="submit" disabled>Запустить эксперимент</button><span class="field-hint">Одновременно выполняется один опыт</span></div>
+      </form>
+    </section>
+    <section class="panel scenario-panel">
+      <div class="section-heading"><h2>Исходный сценарий</h2><span class="step-label">Только чтение</span></div>
+      <p class="field-hint">В запрос попадёт полный сценарий с тремя изменениями из формы: p99, доля ошибок и seed.</p>
+      <pre id="scenario-yaml" class="code-preview">Сценарий ещё не выбран.</pre>
+    </section>
+  </div>
+  <section class="panel history-panel">
+    <div class="section-heading"><h2>Запуски</h2><div class="button-row"><button id="refresh-history" class="secondary" type="button">Обновить</button><button id="reset-lab" class="secondary" type="button">Очистить стенд</button></div></div>
+    <p class="field-hint">Очистка доступна, когда нет активного опыта. Её результат подтверждает Runner.</p>
+    <p id="history-error" class="alert" role="alert" hidden></p><p id="reset-status" role="status" class="field-hint"></p>
+    <div class="table-scroll"><table><thead><tr><th>Сценарий / ID</th><th>Состояние</th><th>Создан</th><th>Результат</th></tr></thead><tbody id="history"></tbody></table></div>
+    <p id="history-empty" class="empty">Пока нет запусков.</p>
+  </section>
+</main>
+<footer>Восстановление реплик · общий API для интерфейса и CLI</footer>
+</body>
+</html>

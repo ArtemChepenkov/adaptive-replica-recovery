@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Результаты · Replica Recovery</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <script defer src="/js/ui.js"></script>
+  <script defer src="/js/results-experiment.js"></script>
+</head>
+<body th:attr="data-experiment-id=${experimentId},data-simulated=${simulated}">
+<header class="topbar"><a class="brand" href="/">REPLICA RECOVERY <span>EXPERIMENT RUNNER</span></a><a href="/" class="nav-link">Все запуски</a></header>
+<main>
+  <div class="page-heading"><div><p class="eyebrow">Итог опыта</p><h1 id="experiment-name">Результаты эксперимента</h1><p class="mono muted" th:text="${experimentId}"></p></div><a class="button secondary" th:href="@{/experiments/{id}(id=${experimentId})}">Графики и состояние</a></div>
+  <p id="simulation-notice" class="notice" th:hidden="${!simulated}"><strong>TEST-LAB · Имитация</strong> Эти показатели проверяют Runner и не оценивают эффективность метода восстановления.</p>
+  <noscript><p class="alert">Для загрузки итоговых показателей нужен JavaScript.</p></noscript>
+  <p id="result-error" class="alert" role="alert" hidden></p>
+  <section class="panel result-overview"><div><span class="field-hint">Состояние</span><strong id="final-state">Загрузка…</strong></div><div><span class="field-hint">Причина завершения</span><strong id="final-reason">—</strong></div><div><span class="field-hint">Очистка</span><strong id="cleanup-state">нет данных</strong></div></section>
+  <div class="summary-grid">
+    <section class="stat"><span>Время до безопасного состояния</span><strong id="time-to-safe">нет данных</strong><small>От внесения отказа до достаточного числа копий и доменов</small></section>
+    <section class="stat"><span>Длительность восстановления</span><strong id="recovery-time">нет данных</strong><small>До подтверждённого завершения перемещений</small></section>
+    <section class="stat"><span>Критические партиция-секунды</span><strong id="critical-seconds">нет данных</strong><small>Суммарное время партиций с недостаточным числом копий</small></section>
+    <section class="stat"><span>Время нарушения SLO</span><strong id="slo-violation">нет данных</strong><small>По записанным окнам измерений</small></section>
+    <section class="stat"><span>Максимальный оконный p99</span><strong id="max-p99">нет данных</strong><small>Не является общим p99 всех запросов</small></section>
+    <section class="stat"><span>Средняя доля ошибок</span><strong id="mean-error">нет данных</strong><small>Взвешена по времени окон</small></section>
+  </div>
+  <section class="panel"><h2>Полнота результата</h2><p id="coverage" class="warning-text">Загрузка…</p><p id="result-location" class="mono field-hint"></p><p id="files-state" class="field-hint"></p></section>
+  <section class="panel"><div class="section-heading"><h2>События эксперимента</h2><span class="step-label">Включая очистку</span></div><div class="table-scroll"><table><thead><tr><th>Время</th><th>Источник</th><th>Уровень</th><th>Сообщение</th></tr></thead><tbody id="events"></tbody></table></div><p id="events-empty" class="empty">Событий нет.</p></section>
+</main>
+<footer>Итоговые значения рассчитаны по сохранённым измерениям Runner</footer>
+</body>
+</html>

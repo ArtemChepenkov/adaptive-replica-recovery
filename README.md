@@ -43,13 +43,10 @@ git -C cruise-control remote add upstream https://github.com/cruise-control-for-
 
 ```bash
 bash infrastructure/scripts/lab-up.sh dev
-bash infrastructure/scripts/run-experiment.sh infrastructure/scenarios/smoke-fixed.yaml
-bash infrastructure/scripts/stop-experiment.sh <experiment-id>
 bash infrastructure/scripts/lab-down.sh
 ```
 
-Базовый стенд реализован в Task 2. Команды `run-experiment.sh` и
-`stop-experiment.sh` появятся вместе с Runner на следующих этапах.
+Базовый стенд реализован в Task 2.
 Проверка стенда: `bash infrastructure/tests/compose-smoke.sh dev`.
 Настройка и протокол проверок: [Task 2 — базовый стенд](docs/implementation/task-02-base-kafka-cruise-control-lab.md).
 
@@ -77,6 +74,34 @@ HTTP API и координатор Runner реализованы в Task 6. Пр
 Сборка Runner: `bash ./gradlew :experiment-runner:bootJar` из `experiment-platform`.
 Для имитационного запуска используйте `--spring.profiles.active=test-lab`.
 [Task 6 — запуск API и проверка](docs/implementation/task-06-experiment-orchestration-api.md).
+
+В Task 7 добавлены страницы запуска `/`, наблюдения `/experiments/{id}` и
+результатов `/experiments/{id}/results`. Графики и YAML-парсер входят в JAR;
+доступ к CDN при работе не нужен.
+
+Для проверки UI без изменения Kafka запустите из `experiment-platform`:
+
+```bash
+bash ./gradlew :experiment-runner:bootRun --args='--spring.profiles.active=test-lab'
+```
+
+Откройте `http://localhost:8080`. Режим TEST-LAB явно отмечен: показатели
+искусственные, физические отказ и восстановление не выполняются.
+CLI использует тот же REST API. Из корня проекта:
+
+```bash
+bash infrastructure/scripts/run-experiment.sh infrastructure/scenarios/runner-smoke.yaml
+bash infrastructure/scripts/stop-experiment.sh <experiment-id>
+bash infrastructure/scripts/reset-lab.sh
+```
+
+`RUNNER_API_URL` меняет адрес API для скриптов. Настоящий Docker-адаптер
+остаётся Task 9; `runner-smoke.yaml` предназначен для test-lab.
+Для JS-тестов нужен Node.js 20+ (можно запускать из Windows, независимо от Java в WSL).
+Для JS-тестов нужен Node.js 20+ (можно запускать из Windows, независимо от Java в WSL).
+Проверки: `node --test infrastructure/tests/ui-behaviour.cjs` и
+`bash infrastructure/tests/api-scripts-smoke.sh` (при работающем test-lab).
+[Task 7 — интерфейс, скрипты и результаты проверок](docs/implementation/task-07-experiment-ui-and-scripts.md).
 
 - [Отчёты по реализации задач](docs/implementation/README.md). После каждой задачи отчёт сохраняется в `docs/implementation/`.
 - [Спецификация](docs/superpowers/specs/2026-09-10-adaptive-replica-recovery-design.md)
