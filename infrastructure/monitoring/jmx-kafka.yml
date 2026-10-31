@@ -1,0 +1,44 @@
+# Kafka 4.0.0 platform MBeans. Aggregate BrokerTopicMetrics exclude per-topic series.
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+includeObjectNames:
+  - 'kafka.server:type=BrokerTopicMetrics,name=BytesOutPerSec'
+  - 'kafka.server:type=BrokerTopicMetrics,name=BytesInPerSec'
+  - 'kafka.server:type=BrokerTopicMetrics,name=ReplicationBytesOutPerSec'
+  - 'kafka.server:type=BrokerTopicMetrics,name=ReplicationBytesInPerSec'
+  - 'kafka.server:type=ReplicaManager,name=UnderReplicatedPartitions'
+  - 'kafka.network:type=RequestMetrics,name=TotalTimeMs,*'
+  - 'kafka.server:type=FetcherLagMetrics,name=ConsumerLag,*'
+rules:
+  - pattern: 'kafka.server<type=BrokerTopicMetrics, name=BytesOutPerSec><>Count'
+    name: broker_client_out_bytes_total
+    type: COUNTER
+    help: Kafka consumer payload bytes out; follower replication is a separate counter.
+  - pattern: 'kafka.server<type=BrokerTopicMetrics, name=BytesInPerSec><>Count'
+    name: broker_client_in_bytes_total
+    type: COUNTER
+  - pattern: 'kafka.server<type=BrokerTopicMetrics, name=ReplicationBytesOutPerSec><>Count'
+    name: broker_replication_out_bytes_total
+    type: COUNTER
+    help: Follower replication payload bytes out, including reassignment as a subset.
+  - pattern: 'kafka.server<type=BrokerTopicMetrics, name=ReplicationBytesInPerSec><>Count'
+    name: broker_replication_in_bytes_total
+    type: COUNTER
+  - pattern: 'kafka.server<type=ReplicaManager, name=UnderReplicatedPartitions><>Value'
+    name: broker_under_replicated_partitions
+    type: GAUGE
+  - pattern: 'kafka.network<type=RequestMetrics, name=TotalTimeMs, request=([^,>]+)(?:, [^>]+)?><>(99thPercentile|95thPercentile|Mean)'
+    name: broker_request_latency_ms
+    type: GAUGE
+    labels:
+      request: '$1'
+      statistic: '$2'
+    help: Kafka request histogram statistic in milliseconds; diagnostic, not producer SLO latency.
+  - pattern: 'kafka.server<type=FetcherLagMetrics, name=ConsumerLag, clientId=([^,>]+), topic=([^,>]+), partition=([^,>]+)><>Value'
+    name: broker_replica_fetcher_lag
+    type: GAUGE
+    labels:
+      client_id: '$1'
+      topic: '$2'
+      partition: '$3'
+    help: Replica fetcher lag in message offsets; absent when no follower fetcher exists.

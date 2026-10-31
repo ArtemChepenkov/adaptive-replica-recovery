@@ -21,6 +21,7 @@ x-broker-env: &broker-env
   KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
   PROCESS_ROLES: broker,controller
   LISTENERS: INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
+  BROKER_JAVA_AGENT: -javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9404:/etc/recovery/jmx-kafka.yml
 
 services:
   broker-1:
@@ -36,6 +37,7 @@ services:
       - broker-1-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-a, backbone]
   broker-2:
     <<: *broker
@@ -50,6 +52,7 @@ services:
       - broker-2-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-b, backbone]
   broker-3:
     <<: *broker
@@ -64,6 +67,7 @@ services:
       - broker-3-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-c, backbone]
   broker-4:
     <<: *broker
@@ -80,6 +84,7 @@ services:
       - broker-4-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-a, backbone]
   broker-5:
     <<: *broker
@@ -97,6 +102,7 @@ services:
       - broker-5-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-b, backbone]
   broker-6:
     <<: *broker
@@ -114,6 +120,7 @@ services:
       - broker-6-data:/var/lib/kafka/data
       - ./kafka/server.properties.template:/etc/recovery/server.properties.template:ro
       - ./kafka/start-broker.sh:/etc/recovery/start-broker.sh:ro
+      - ./monitoring/jmx-kafka.yml:/etc/recovery/jmx-kafka.yml:ro
     networks: [zone-c, backbone]
   cruise-control:
     image: replica-recovery-cruise-control:baseline
@@ -124,9 +131,12 @@ services:
     ports: ["127.0.0.1:${CRUISE_CONTROL_PORT:-9090}:9090"]
     mem_limit: 1g
     cpus: 1.0
+    environment:
+      KAFKA_OPTS: -javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=9404:/opt/cruise-control/config/jmx-cruise-control.yml
     volumes:
       - ./cruise-control/cruisecontrol.properties:/opt/cruise-control/config/cruisecontrol.properties:ro
       - ./cruise-control/capacity.json:/opt/cruise-control/config/capacity.json:ro
+      - ./monitoring/jmx-cruise-control.yml:/opt/cruise-control/config/jmx-cruise-control.yml:ro
     depends_on:
       broker-1: {condition: service_healthy}
       broker-2: {condition: service_healthy}
@@ -139,6 +149,28 @@ services:
       timeout: 15s
       retries: 15
       start_period: 30s
+
+  prometheus:
+    image: prom/prometheus:v3.5.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=24h
+    ports: ["127.0.0.1:${PROMETHEUS_PORT:-9091}:9090"]
+    mem_limit: 256m
+    cpus: 0.5
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - ./monitoring/targets-${MONITORING_PROFILE:-dev}.json:/etc/prometheus/targets.json:ro
+      - prometheus-data:/prometheus
+    networks: [backbone]
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=/dev/null http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
 networks:
   backbone:
@@ -153,3 +185,4 @@ volumes:
   broker-4-data:
   broker-5-data:
   broker-6-data:
+  prometheus-data:

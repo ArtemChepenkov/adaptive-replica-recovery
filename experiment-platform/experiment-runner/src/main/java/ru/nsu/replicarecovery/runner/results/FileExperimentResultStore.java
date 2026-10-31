@@ -29,11 +29,13 @@ import ru.nsu.replicarecovery.runner.domain.ExperimentOutcome;
 import ru.nsu.replicarecovery.runner.domain.ExperimentRecord;
 import ru.nsu.replicarecovery.runner.lab.CleanupResult;
 import ru.nsu.replicarecovery.runner.lifecycle.ExperimentStateMachine;
+import ru.nsu.replicarecovery.runner.metrics.MonitoringSnapshot;
 
 public final class FileExperimentResultStore implements ExperimentResultStore {
-  static final String HEADER = "timestamp,produceP99Ms,errorRate,offeredRps,achievedRps,"
+  static final String LEGACY_HEADER = "timestamp,produceP99Ms,errorRate,offeredRps,achievedRps,"
       + "throttleBytesPerSecond,remainingBytes,progressBytesPerSecond,criticalPartitions,safeState,"
       + "brokerCpuPercent,brokerNetworkOutBytesPerSecond,brokerDiskWriteBytesPerSecond\n";
+  static final String HEADER = LEGACY_HEADER.stripTrailing() + ",monitoringSnapshot\n";
   private final Path root;
   private final Clock clock;
   private final ObjectMapper json = JsonMapper.builder().findAndAddModules()
@@ -194,6 +196,16 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
       List<String> values = new ArrayList<>();
       for (Object field : fields) {
         values.add(field == null ? "" : field.toString());
+      }
+      String header = io(() -> {
+        try (var reader = Files.newBufferedReader(directory(id).resolve("metrics.csv"), StandardCharsets.UTF_8)) {
+          return reader.readLine();
+        }
+      });
+      if (HEADER.stripTrailing().equals(header)) {
+        values.add(row.monitoring() == null ? "" : "\"" + encode(row.monitoring()).replace("\"", "\"\"") + "\"");
+      } else if (!LEGACY_HEADER.stripTrailing().equals(header) || row.monitoring() != null) {
+        throw new IllegalArgumentException("cannot append monitoring to an invalid or legacy metrics CSV header");
       }
       append(id, "metrics.csv", String.join(",", values));
       return null;
@@ -366,13 +378,15 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
   private List<ExperimentMetricRow> readMetrics(String id, boolean tolerateTornTail) {
     return io(() -> {
       List<String> lines = Files.readAllLines(directory(id).resolve("metrics.csv"), StandardCharsets.UTF_8);
-      if (lines.isEmpty() || !lines.get(0).equals(HEADER.stripTrailing())) {
+      if (lines.isEmpty() || !(lines.get(0).equals(HEADER.stripTrailing())
+          || lines.get(0).equals(LEGACY_HEADER.stripTrailing()))) {
         throw new IllegalArgumentException("invalid metrics CSV header");
       }
+      int columns = lines.get(0).equals(HEADER.stripTrailing()) ? 14 : 13;
       List<ExperimentMetricRow> rows = new ArrayList<>();
       for (String line : lines.subList(1, lines.size())) {
         try {
-          rows.add(parseMetric(line));
+          rows.add(parseMetric(line, columns));
         } catch (RuntimeException exception) {
           if (tolerateTornTail) {
             break;
@@ -384,16 +398,36 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
     });
   }
 
-  private ExperimentMetricRow parseMetric(String line) {
-    String[] values = line.split(",", -1);
-    if (values.length != 13 || !(values[9].equals("true") || values[9].equals("false"))) {
+  private ExperimentMetricRow parseMetric(String line, int columns) {
+    // The first 13 fields are validated numbers/booleans/ISO timestamps and cannot contain commas.
+    // Only the final monitoring field is quoted CSV containing compact JSON.
+    String[] values = line.split(",", columns);
+    if (values.length != columns || !(values[9].equals("true") || values[9].equals("false"))) {
       throw new IllegalArgumentException("invalid metrics CSV row");
     }
     return new ExperimentMetricRow(Instant.parse(values[0]), nullable(values[1]),
         Double.parseDouble(values[2]), Double.parseDouble(values[3]), Double.parseDouble(values[4]),
         Long.parseLong(values[5]), Long.parseLong(values[6]), Long.parseLong(values[7]),
         Integer.parseInt(values[8]), Boolean.parseBoolean(values[9]), nullable(values[10]),
-        nullable(values[11]), nullable(values[12]));
+        nullable(values[11]), nullable(values[12]), columns == 14 ? parseMonitoring(values[13]) : null);
+  }
+
+  private MonitoringSnapshot parseMonitoring(String field) {
+    if (field.isEmpty()) return null;
+    if (field.length() < 2 || field.charAt(0) != '"' || field.charAt(field.length() - 1) != '"') {
+      throw new IllegalArgumentException("monitoring JSON must be a quoted CSV field");
+    }
+    StringBuilder decoded = new StringBuilder();
+    for (int index = 1; index < field.length() - 1; index++) {
+      char value = field.charAt(index);
+      if (value == '"') {
+        if (index + 1 >= field.length() - 1 || field.charAt(++index) != '"') {
+          throw new IllegalArgumentException("invalid quote in monitoring CSV field");
+        }
+      }
+      decoded.append(value);
+    }
+    return io(() -> json.readValue(decoded.toString(), MonitoringSnapshot.class));
   }
 
   private void event(String id, String source, String severity, String message) {

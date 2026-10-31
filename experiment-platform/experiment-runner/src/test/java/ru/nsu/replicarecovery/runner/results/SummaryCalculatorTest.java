@@ -20,6 +20,8 @@ import ru.nsu.replicarecovery.model.SloSpec;
 import ru.nsu.replicarecovery.runner.domain.ExperimentOutcome;
 import ru.nsu.replicarecovery.runner.domain.ExperimentRecord;
 import ru.nsu.replicarecovery.runner.lab.CleanupResult;
+import ru.nsu.replicarecovery.runner.metrics.MonitoringSnapshot;
+import java.util.Map;
 
 class SummaryCalculatorTest {
   private static final Instant START = Instant.parse("2026-10-28T10:00:00Z");
@@ -185,6 +187,18 @@ class SummaryCalculatorTest {
   private ExperimentSummary calculate(ExperimentRecord record, List<ExperimentMetricRow> rows, long seconds) {
     return calculator.calculate(record, rows, START.plusSeconds(seconds), ExperimentOutcome.COMPLETED,
         "RECOVERY_COMPLETED", CleanupResult.ok());
+  }
+
+  @Test
+  void incompletePerBrokerCoverageCannotBecomeCompleteFromHealthyAggregateNumbers() {
+    var monitoring = new MonitoringSnapshot(START, false, Map.of(1, 10.0), Map.of(1, 1024.0),
+        Map.of(1, 100.0), Map.of(1, 200.0), 0.0, null, null, List.of("Cruise Control unavailable"));
+    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 0, 1, 0, true,
+        10.0, 100.0, 200.0, monitoring);
+    var summary = calculate(record(START, START), List.of(sample), 5);
+    assertThat(summary.diagnosticDataComplete()).isFalse();
+    assertThat(summary.produceP99Ms()).isEqualTo(90.0);
+    assertThat(summary.sloViolationTimeSeconds()).isZero();
   }
 
   private static ExperimentMetricRow row(long seconds, Double p99, double errors, long throttle,

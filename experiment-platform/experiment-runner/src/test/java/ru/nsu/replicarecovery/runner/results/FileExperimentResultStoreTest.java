@@ -23,6 +23,7 @@ import ru.nsu.replicarecovery.model.ExperimentState;
 import ru.nsu.replicarecovery.runner.config.ExperimentSpecLoader;
 import ru.nsu.replicarecovery.runner.domain.ExperimentOutcome;
 import ru.nsu.replicarecovery.runner.lab.CleanupResult;
+import ru.nsu.replicarecovery.runner.metrics.MonitoringSnapshot;
 
 class FileExperimentResultStoreTest {
   @TempDir Path root;
@@ -151,7 +152,7 @@ class FileExperimentResultStoreTest {
     assertThat(Files.readAllLines(root.resolve("parallel/events.log"))).hasSize(201);
     var metrics = Files.readAllLines(root.resolve("parallel/metrics.csv"));
     assertThat(metrics).hasSize(201);
-    assertThat(metrics).allSatisfy(line -> assertThat(line.split(",", -1)).hasSize(13));
+    assertThat(metrics).allSatisfy(line -> assertThat(line.split(",", -1)).hasSize(14));
   }
 
   @Test
@@ -165,6 +166,32 @@ class FileExperimentResultStoreTest {
       Files.writeString(snapshot, changed.toString());
       assertThatThrownBy(() -> store.get("schema")).isInstanceOf(RuntimeException.class);
     }
+  }
+
+  @Test
+  void persistsPerBrokerMonitoringWithQuotedJsonAndPreservesUnknownSignals() throws Exception {
+    store.create("monitoring", spec());
+    var monitoring = new MonitoringSnapshot(START, false, Map.of(1, 12.0), Map.of(1, 1048576.0),
+        Map.of(1, 128.0), Map.of(), null, 0.0, "NO_TASK_IN_PROGRESS",
+        List.of("missing disk, source \"docker\"", "remote\nerror"));
+    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 100, 1, 3,
+        false, 12.0, 128.0, null, monitoring);
+    store.appendMetric("monitoring", sample);
+    assertThat(store.metrics("monitoring")).containsExactly(sample);
+    assertThat(Files.readAllLines(root.resolve("monitoring/metrics.csv"))).hasSize(2);
+    assertThat(store.metrics("monitoring").get(0).monitoring().underReplicatedPartitions()).isNull();
+  }
+
+  @Test
+  void readsOldThirteenColumnMetricsWithoutInventingMonitoring() throws Exception {
+    store.create("legacy", spec());
+    String header = FileExperimentResultStore.HEADER.replace(",monitoringSnapshot", "");
+    Files.writeString(root.resolve("legacy/metrics.csv"), header
+        + START + ",90.0,0.0,100.0,99.0,20,100,1,3,false,10.0,128.0,256.0\n");
+    var sample = store.metrics("legacy").get(0);
+    assertThat(sample.produceP99Ms()).isEqualTo(90.0);
+    assertThat(sample.monitoring()).isNull();
+    assertThat(sample.brokerCpuPercent()).isEqualTo(10.0);
   }
 
   @Test

@@ -103,6 +103,29 @@ bash infrastructure/scripts/reset-lab.sh
 `bash infrastructure/tests/api-scripts-smoke.sh` (при работающем test-lab).
 [Task 7 — интерфейс, скрипты и результаты проверок](docs/implementation/task-07-experiment-ui-and-scripts.md).
 
+В Task 8 добавлен служебный мониторинг: JMX exporters Kafka/Cruise Control,
+Prometheus на `http://localhost:9091`, read-only Docker stats и сборщик Runner.
+`lab-up.sh dev` запускает 4 брокера и 5 targets; `final` — 6 брокеров и 7 targets.
+Scrape — 5 секунд, хранение Prometheus — 24 часа. Проверка после запуска стенда:
+
+```bash
+bash infrastructure/tests/monitoring-smoke.sh dev
+```
+
+В обычном профиле Runner использует реальный мониторинг. `MONITORING_BROKER_IDS`
+задаёт ожидаемые брокеры (по умолчанию `1,2,3,4`; для final — `1,2,3,4,5,6`),
+`COMPOSE_PROJECT_NAME` должен совпадать с проектом стенда. Пользовательские SLO
+по-прежнему измеряет Load Generator; служебные метрики их не заменяют.
+Недоступность диагностики даёт warning и неполный diagnostic summary, но сама
+по себе не останавливает опыт. В `metrics.csv` добавлена последняя колонка
+`monitoringSnapshot` с JSON по брокерам; старые файлы из 13 колонок читаются.
+
+Для проверки отказа Prometheus используйте test-lab с явным подключением реальной
+диагностики: `--runner.test-lab.live-monitoring=true --runner.test-lab.recovery-polls=30`.
+Тогда `monitoring-outage-smoke.sh` останавливает только Prometheus и восстанавливает
+его готовность; отказы Kafka и восстановление остаются имитационными.
+[Task 8 — мониторинг и контрольная точка](docs/implementation/task-08-lab-monitoring.md).
+
 - [Отчёты по реализации задач](docs/implementation/README.md). После каждой задачи отчёт сохраняется в `docs/implementation/`.
 - [Спецификация](docs/superpowers/specs/2026-09-10-adaptive-replica-recovery-design.md)
 - [План реализации](docs/superpowers/plans/2026-09-10-adaptive-replica-recovery.md)

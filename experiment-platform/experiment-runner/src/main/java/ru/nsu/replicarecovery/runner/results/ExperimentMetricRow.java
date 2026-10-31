@@ -1,6 +1,7 @@
 package ru.nsu.replicarecovery.runner.results;
 
 import java.time.Instant;
+import ru.nsu.replicarecovery.runner.metrics.MonitoringSnapshot;
 
 public record ExperimentMetricRow(
     Instant timestamp,
@@ -15,7 +16,16 @@ public record ExperimentMetricRow(
     boolean safeState,
     Double brokerCpuPercent,
     Double brokerNetworkOutBytesPerSecond,
-    Double brokerDiskWriteBytesPerSecond) {
+    Double brokerDiskWriteBytesPerSecond,
+    MonitoringSnapshot monitoring) {
+  public ExperimentMetricRow(Instant timestamp, Double produceP99Ms, double errorRate,
+      double offeredRps, double achievedRps, long throttleBytesPerSecond, long remainingBytes,
+      long progressBytesPerSecond, int criticalPartitions, boolean safeState, Double brokerCpuPercent,
+      Double brokerNetworkOutBytesPerSecond, Double brokerDiskWriteBytesPerSecond) {
+    this(timestamp, produceP99Ms, errorRate, offeredRps, achievedRps, throttleBytesPerSecond,
+        remainingBytes, progressBytesPerSecond, criticalPartitions, safeState, brokerCpuPercent,
+        brokerNetworkOutBytesPerSecond, brokerDiskWriteBytesPerSecond, null);
+  }
   public ExperimentMetricRow {
     if (timestamp == null || !valid(produceP99Ms) || !Double.isFinite(errorRate)
         || errorRate < 0 || errorRate > 1 || !valid(offeredRps) || !valid(achievedRps)

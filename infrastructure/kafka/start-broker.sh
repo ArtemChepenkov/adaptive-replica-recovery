@@ -8,4 +8,5 @@ sed -e "s/@BROKER_ID@/$BROKER_ID/g" \
     /etc/recovery/server.properties.template > /tmp/server.properties
 /opt/kafka/bin/kafka-storage.sh format --ignore-formatted \
   --cluster-id "$CLUSTER_ID" --config /tmp/server.properties
-exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+# Attach only to the broker JVM; admin/format/healthcheck JVMs must not bind 9404.
+KAFKA_OPTS="${KAFKA_OPTS:-} ${BROKER_JAVA_AGENT:-}" exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
