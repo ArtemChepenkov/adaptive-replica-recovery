@@ -1,0 +1,7 @@
+[
+  {"targets": ["broker-1:9404"], "labels": {"service": "kafka", "broker_id": "1"}},
+  {"targets": ["broker-2:9404"], "labels": {"service": "kafka", "broker_id": "2"}},
+  {"targets": ["broker-3:9404"], "labels": {"service": "kafka", "broker_id": "3"}},
+  {"targets": ["broker-4:9404"], "labels": {"service": "kafka", "broker_id": "4"}},
+  {"targets": ["cruise-control:9404"], "labels": {"service": "cruise-control"}}
+]

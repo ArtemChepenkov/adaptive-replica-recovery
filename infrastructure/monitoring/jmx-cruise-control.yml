@@ -1,0 +1,27 @@
+# Names verified against pinned ExecutionTaskTracker and LegacyObjectNameFactory.
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+includeObjectNames:
+  - 'kafka.cruisecontrol:name=Executor.*'
+rules:
+  - pattern: 'kafka.cruisecontrol<name=Executor\.(replica-action|intra-broker-replica-action|leadership-action)-(pending|in-progress|aborting|aborted|dead|completed)><>Value'
+    name: cruise_control_executor_replica_actions
+    type: GAUGE
+    labels:
+      type: '$1'
+      state: '$2'
+    help: Executor task count by task type and state, including zero-valued idle states.
+  - pattern: 'kafka.cruisecontrol<name=Executor\.(inter-broker-partition-movement-rate|intra-broker-partition-movement-rate|leadership-movement-rate)><>Count'
+    name: cruise_control_executor_movements_total
+    type: COUNTER
+    labels:
+      type: '$1'
+    help: Completed Executor task count; not replica bytes transferred.
+  - pattern: 'kafka.cruisecontrol<name=Executor\.partition-data-movement-rate-MB><>Count'
+    name: cruise_control_executor_partition_data_movement_mebibytes_total
+    type: COUNTER
+    help: Estimated MB of terminal tasks, including completed/aborted/dead; not measured network bytes.
+  - pattern: 'kafka.cruisecontrol<name=Executor\.partition-data-movement-rate-MB><>OneMinuteRate'
+    name: cruise_control_executor_partition_data_movement_mebibytes_per_second
+    type: GAUGE
+    help: One-minute EWMA of estimated MB of terminal tasks; diagnostic, not measured recovery throughput.

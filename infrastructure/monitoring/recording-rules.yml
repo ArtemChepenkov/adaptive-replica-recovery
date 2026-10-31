@@ -1,0 +1,10 @@
+groups:
+  - name: kafka-payload-traffic
+    interval: 5s
+    rules:
+      # Kafka 4 BytesOutPerSec excludes follower traffic. ReassignmentBytesOutPerSec
+      # is already a subset of replication traffic and must not be added again.
+      - record: broker_network_out_bytes_total
+        expr: broker_client_out_bytes_total + broker_replication_out_bytes_total
+      - record: broker_network_in_bytes_total
+        expr: broker_client_in_bytes_total + broker_replication_in_bytes_total

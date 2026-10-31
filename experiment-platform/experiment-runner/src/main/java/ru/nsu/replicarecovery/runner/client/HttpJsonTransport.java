@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /** Bounded complete-body reads. Only GET is retried, with three total attempts. */
-final class HttpJsonTransport {
+public final class HttpJsonTransport {
   final ObjectMapper json = JsonMapper.builder().findAndAddModules()
       .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
       .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
@@ -32,6 +32,7 @@ final class HttpJsonTransport {
   private final HttpClient client;
   private final Duration readTimeout;
   private final Sleeper sleeper;
+  private final int getAttempts;
 
   HttpJsonTransport(String base) {
     this(base, Duration.ofSeconds(3), Duration.ofSeconds(10), duration ->
@@ -39,6 +40,10 @@ final class HttpJsonTransport {
   }
 
   HttpJsonTransport(String base, Duration connectTimeout, Duration readTimeout, Sleeper sleeper) {
+    this(base, connectTimeout, readTimeout, sleeper, 3);
+  }
+
+  private HttpJsonTransport(String base, Duration connectTimeout, Duration readTimeout, Sleeper sleeper, int getAttempts) {
     URI uri = URI.create(base);
     if ((!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme()))
         || uri.getHost() == null || uri.getRawUserInfo() != null
@@ -50,11 +55,16 @@ final class HttpJsonTransport {
     this.base = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     this.readTimeout = readTimeout;
     this.sleeper = sleeper;
+    this.getAttempts = getAttempts;
     client = HttpClient.newBuilder().connectTimeout(connectTimeout)
         .followRedirects(HttpClient.Redirect.NEVER).build();
   }
 
-  JsonNode get(String path) {
+  public static HttpJsonTransport monitoring(String base) {
+    return new HttpJsonTransport(base, Duration.ofSeconds(1), Duration.ofSeconds(2), duration -> { }, 1);
+  }
+
+  public JsonNode get(String path) {
     return exchange("GET", path, null).body();
   }
 
@@ -69,7 +79,7 @@ final class HttpJsonTransport {
   }
 
   private Reply exchange(String method, String path, byte[] body) {
-    int attempts = method.equals("GET") ? 3 : 1;
+    int attempts = method.equals("GET") ? getAttempts : 1;
     for (int attempt = 0; attempt < attempts; attempt++) {
       if (Thread.currentThread().isInterrupted()) {
         throw new RemoteCallException("HTTP call interrupted", new InterruptedException());
@@ -129,7 +139,7 @@ final class HttpJsonTransport {
     }
   }
 
-  static String query(String value) {
+  public static String query(String value) {
     return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 

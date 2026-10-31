@@ -7,19 +7,26 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import ru.nsu.replicarecovery.model.*;
 import ru.nsu.replicarecovery.runner.client.*;
 import ru.nsu.replicarecovery.runner.lab.*;
 
-/** Explicit opt-in simulation. It performs no HTTP, Docker, Kafka or resource operations. */
+/** Simulated load/recovery/faults. Read-only live diagnostics require a separate explicit opt-in. */
 @Configuration(proxyBeanMethods = false)
 @Profile("test-lab")
 public class TestLabConfiguration {
-  @Bean Simulation simulation(Clock clock) { return new Simulation(clock); }
+  @Bean Simulation simulation(Clock clock, @Value("${runner.test-lab.recovery-polls:3}") int recoveryPolls) {
+    return new Simulation(clock, recoveryPolls);
+  }
 
   @Bean LoadGeneratorClient simulatedLoad(Simulation simulation) { return simulation.load(); }
   @Bean CruiseControlClient simulatedCruise(Simulation simulation) { return simulation.cruise(); }
-  @Bean PrometheusClient simulatedMonitoring() {
+  @Bean PrometheusClient simulatedMonitoring(Environment environment, Clock clock) {
+    if (environment.getProperty("runner.test-lab.live-monitoring", Boolean.class, false)) {
+      return RunnerConfiguration.monitoringClient(environment, clock);
+    }
     return () -> new PrometheusClient.ResourceMetrics(10.0, 1024.0, 2048.0);
   }
   @Bean @Primary LabController simulatedLab() {
@@ -33,12 +40,17 @@ public class TestLabConfiguration {
 
   static final class Simulation {
     final Clock clock;
+    final int recoveryPolls;
     volatile ExperimentSpec spec;
     volatile String loadId;
     volatile boolean running;
     volatile boolean recovering;
     int polls;
-    Simulation(Clock clock) { this.clock = clock; }
+    Simulation(Clock clock, int recoveryPolls) {
+      if (recoveryPolls < 1) throw new IllegalArgumentException("test-lab recovery polls must be positive");
+      this.clock = clock;
+      this.recoveryPolls = recoveryPolls;
+    }
 
     LoadGeneratorClient load() {
       return new LoadGeneratorClient() {
@@ -60,7 +72,7 @@ public class TestLabConfiguration {
       return new CruiseControlClient() {
         public String startRecovery(ExperimentSpec request) { recovering = true; polls = 0; return "simulated-task-" + UUID.randomUUID(); }
         public RecoveryControlStatus status() {
-          if (recovering && ++polls >= 3) recovering = false;
+          if (recovering && ++polls >= recoveryPolls) recovering = false;
           long throttle = spec == null ? 0 : Math.multiplyExact(spec.recovery().initialThrottleMiBps(), 1048576L);
           return new RecoveryControlStatus(!recovering, false, recovering, throttle,
               recovering ? 10485760L : 0L, 1048576L, recovering ? 1 : 0, !recovering,

@@ -99,7 +99,8 @@ public final class SummaryCalculator {
         }
       }
       diagnosticsComplete &= row.brokerCpuPercent() != null
-          && row.brokerNetworkOutBytesPerSecond() != null && row.brokerDiskWriteBytesPerSecond() != null;
+          && row.brokerNetworkOutBytesPerSecond() != null && row.brokerDiskWriteBytesPerSecond() != null
+          && (row.monitoring() == null || row.monitoring().available());
     }
 
     requireFinite(throttleIntegral, "throttle integral");

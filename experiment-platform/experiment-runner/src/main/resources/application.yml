@@ -9,3 +9,9 @@ runner:
   load-url: ${LOAD_GENERATOR_URL:http://localhost:8081}
   cruise-url: ${CRUISE_CONTROL_URL:http://localhost:9090}
   prometheus-url: ${PROMETHEUS_URL:http://localhost:9091}
+  monitoring:
+    broker-ids: ${MONITORING_BROKER_IDS:1,2,3,4}
+    compose-project: ${COMPOSE_PROJECT_NAME:replica-recovery}
+  test-lab:
+    live-monitoring: ${TEST_LAB_LIVE_MONITORING:false}
+    recovery-polls: ${TEST_LAB_RECOVERY_POLLS:3}

@@ -1,4 +1,11 @@
 # syntax=docker/dockerfile:1
+FROM eclipse-temurin:17-jre-jammy AS jmx-exporter
+RUN mkdir -p /opt/jmx-exporter \
+    && curl --fail --show-error --location --retry 3 \
+       https://github.com/prometheus/jmx_exporter/releases/download/1.4.0/jmx_prometheus_javaagent-1.4.0.jar \
+       -o /opt/jmx-exporter/jmx_prometheus_javaagent.jar \
+    && echo 'db1492e95a7ee95cd5e0a969875c0d4f0ef6413148d750351a41cc71d775f59a  /opt/jmx-exporter/jmx_prometheus_javaagent.jar' | sha256sum --check
+
 FROM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /workspace/cruise-control
 COPY . /workspace/
@@ -20,9 +27,11 @@ RUN --mount=type=cache,target=/root/.gradle bash ./gradlew \
 
 FROM apache/kafka:4.0.0 AS kafka
 COPY --from=build /workspace/cruise-control/cruise-control-metrics-reporter/build/libs/*.jar /opt/kafka/libs/
+COPY --from=jmx-exporter /opt/jmx-exporter/ /opt/jmx-exporter/
 
 FROM eclipse-temurin:17-jre-jammy AS runtime
 WORKDIR /opt/cruise-control
+COPY --from=jmx-exporter /opt/jmx-exporter/ /opt/jmx-exporter/
 COPY --from=build /workspace/cruise-control/cruise-control/build/libs/ cruise-control/build/libs/
 COPY --from=build /workspace/cruise-control/cruise-control/build/dependant-libs/ cruise-control/build/dependant-libs/
 COPY --from=build /workspace/cruise-control/cruise-control-metrics-reporter/build/libs/ cruise-control-metrics-reporter/build/libs/

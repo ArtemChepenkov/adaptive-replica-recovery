@@ -217,7 +217,8 @@ public final class ExperimentCoordinator implements AutoCloseable {
         }
         if (resources == null) resources = new PrometheusClient.ResourceMetrics(null, null, null);
         if (!run.monitoringWarning && (resources.brokerCpuPercent() == null
-            || resources.brokerNetworkOutBytesPerSecond() == null || resources.brokerDiskWriteBytesPerSecond() == null)) {
+            || resources.brokerNetworkOutBytesPerSecond() == null || resources.brokerDiskWriteBytesPerSecond() == null
+            || (resources.monitoring() != null && !resources.monitoring().available()))) {
           store.appendEvent(run.record.id(), "monitoring", "WARNING", "MONITORING_UNAVAILABLE");
           run.monitoringWarning = true;
         }
@@ -226,7 +227,8 @@ public final class ExperimentCoordinator implements AutoCloseable {
         store.appendMetric(run.record.id(), new ExperimentMetricRow(timestamp, sample.p99Ms(), sample.errorRate(),
             sample.offeredRps(), sample.achievedRps(), status.throttleBytesPerSecond(), status.remainingBytes(),
             status.progressBytesPerSecond(), status.criticalPartitions(), status.safeState(),
-            resources.brokerCpuPercent(), resources.brokerNetworkOutBytesPerSecond(), resources.brokerDiskWriteBytesPerSecond()));
+            resources.brokerCpuPercent(), resources.brokerNetworkOutBytesPerSecond(), resources.brokerDiskWriteBytesPerSecond(),
+            resources.monitoring()));
         Map<String, Object> decision = status.decision().isEmpty()
             ? Map.of("reason", status.reason(), "throttleBytesPerSecond", status.throttleBytesPerSecond()) : status.decision();
         if (!decision.equals(run.lastDecision)) {

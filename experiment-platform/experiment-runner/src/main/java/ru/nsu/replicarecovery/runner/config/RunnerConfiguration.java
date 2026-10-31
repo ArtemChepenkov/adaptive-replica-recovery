@@ -4,6 +4,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.convert.DurationStyle;
@@ -15,6 +17,7 @@ import ru.nsu.replicarecovery.runner.client.*;
 import ru.nsu.replicarecovery.runner.lab.LabController;
 import ru.nsu.replicarecovery.runner.lifecycle.ExperimentCoordinator;
 import ru.nsu.replicarecovery.runner.results.ExperimentResultStore;
+import ru.nsu.replicarecovery.runner.metrics.MonitoringCollector;
 
 @Configuration(proxyBeanMethods = false)
 public class RunnerConfiguration {
@@ -34,6 +37,14 @@ public class RunnerConfiguration {
         environment.matchesProfiles("test-lab"));
   }
 
+  static PrometheusClient monitoringClient(Environment environment, Clock clock) {
+    var brokers = Arrays.stream(environment.getProperty("runner.monitoring.broker-ids", "1,2,3,4").split(","))
+        .map(String::trim).map(Integer::valueOf).collect(Collectors.toSet());
+    return new MonitoringCollector(environment.getProperty("runner.prometheus-url", "http://localhost:9091"),
+        environment.getProperty("runner.cruise-url", "http://localhost:9090"),
+        environment.getProperty("runner.monitoring.compose-project", "replica-recovery"), brokers, clock);
+  }
+
   @Configuration(proxyBeanMethods = false)
   @Profile("!test-lab")
   static class HttpAdapters {
@@ -46,11 +57,8 @@ public class RunnerConfiguration {
       return new HttpCruiseControlClient(url);
     }
     @Bean @ConditionalOnMissingBean(PrometheusClient.class)
-    PrometheusClient prometheusClient(@Value("${runner.prometheus-url:http://localhost:9091}") String url,
-        @Value("${runner.prometheus-cpu-query:avg(broker_cpu_percent)}") String cpu,
-        @Value("${runner.prometheus-network-query:sum(rate(broker_network_out_bytes_total[1m]))}") String network,
-        @Value("${runner.prometheus-disk-query:sum(rate(broker_disk_write_bytes_total[1m]))}") String disk) {
-      return new HttpPrometheusClient(url, cpu, network, disk);
+    PrometheusClient prometheusClient(Environment environment, Clock clock) {
+      return monitoringClient(environment, clock);
     }
   }
 }
