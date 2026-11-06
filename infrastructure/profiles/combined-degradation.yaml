@@ -1,0 +1,6 @@
+schemaVersion: 1
+name: combined-degradation
+brokers: [broker-4]
+cpu: {cpus: 0.5}
+network: {egressMbit: 20, ingressMbit: 20, delayMs: 20, jitterMs: 5, lossPercent: 0.1}
+disk: {readMiBps: 4, writeMiBps: 2}

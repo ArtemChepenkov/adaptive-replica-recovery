@@ -1,0 +1,6 @@
+schemaVersion: 1
+name: high-latency
+brokers: [broker-4]
+cpu: {cpus: 1.0}
+network: {egressMbit: null, ingressMbit: null, delayMs: 10, jitterMs: 1, lossPercent: 0}
+disk: {readMiBps: null, writeMiBps: null}

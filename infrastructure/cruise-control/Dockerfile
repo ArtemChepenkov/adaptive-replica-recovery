@@ -26,8 +26,11 @@ RUN --mount=type=cache,target=/root/.gradle bash ./gradlew \
     :cruise-control-metrics-reporter:jar --no-daemon --max-workers=2
 
 FROM apache/kafka:4.0.0 AS kafka
+USER root
+RUN apk add --no-cache iproute2 iperf3 fio python3 curl util-linux coreutils iputils iptables
 COPY --from=build /workspace/cruise-control/cruise-control-metrics-reporter/build/libs/*.jar /opt/kafka/libs/
 COPY --from=jmx-exporter /opt/jmx-exporter/ /opt/jmx-exporter/
+USER appuser
 
 FROM eclipse-temurin:17-jre-jammy AS runtime
 WORKDIR /opt/cruise-control
