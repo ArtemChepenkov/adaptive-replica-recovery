@@ -5,7 +5,9 @@ runner:
   results-directory: ${RUNNER_RESULTS_DIRECTORY:../results}
   scenarios-directory: ${RUNNER_SCENARIOS_DIRECTORY:../infrastructure/scenarios}
   poll-interval: ${RUNNER_POLL_INTERVAL:1s}
-  cleanup-timeout: ${RUNNER_CLEANUP_TIMEOUT:30s}
+  cleanup-timeout: ${RUNNER_CLEANUP_TIMEOUT:3m}
+  project-directory: ${RUNNER_PROJECT_DIRECTORY:..}
+  lab-command-timeout: ${LAB_COMMAND_TIMEOUT:3m}
   load-url: ${LOAD_GENERATOR_URL:http://localhost:8081}
   cruise-url: ${CRUISE_CONTROL_URL:http://localhost:9090}
   prometheus-url: ${PROMETHEUS_URL:http://localhost:9091}

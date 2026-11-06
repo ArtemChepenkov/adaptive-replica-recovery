@@ -8,7 +8,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
+import org.springframework.boot.convert.DurationStyle;
 import ru.nsu.replicarecovery.runner.lab.LabController;
+import ru.nsu.replicarecovery.runner.lab.DockerLabController;
 import ru.nsu.replicarecovery.runner.lifecycle.RestartRecovery;
 import ru.nsu.replicarecovery.runner.lifecycle.ExperimentCoordinator;
 import ru.nsu.replicarecovery.runner.results.ExperimentResultStore;
@@ -26,9 +29,11 @@ public class ExperimentRunnerApplication {
   }
 
   @Bean
+  @Profile("!test-lab")
   @ConditionalOnMissingBean(LabController.class)
-  LabController unavailableLabController() {
-    return () -> { throw new IllegalStateException("Lab adapter is not configured; DockerLabController is implemented in Task 9"); };
+  LabController dockerLabController(@Value("${runner.project-directory:..}") String project,
+      @Value("${runner.lab-command-timeout:3m}") String timeout) {
+    return new DockerLabController(Path.of(project), DurationStyle.detectAndParse(timeout));
   }
 
   @Bean

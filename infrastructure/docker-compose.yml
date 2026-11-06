@@ -9,6 +9,8 @@ x-broker: &broker
   entrypoint: ["bash", "/etc/recovery/start-broker.sh"]
   mem_limit: 1g
   cpus: 1.0
+  # Limited to each lab broker's own network namespace; no privileged host helper.
+  cap_add: [NET_ADMIN]
   healthcheck:
     test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
     interval: 15s

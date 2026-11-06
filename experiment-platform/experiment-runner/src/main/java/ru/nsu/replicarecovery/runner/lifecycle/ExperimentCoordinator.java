@@ -158,6 +158,8 @@ public final class ExperimentCoordinator implements AutoCloseable {
     ExperimentOutcome outcome = ExperimentOutcome.COMPLETED;
     String reason = "RECOVERY_COMPLETED";
     try {
+      lab.beginExperiment(run.record.id(), (severity, message) ->
+          store.appendEvent(run.record.id(), "lab", severity, message));
       if (simulated) store.appendEvent(run.record.id(), "runner", "WARNING", "SIMULATED_TEST_LAB_NO_PHYSICAL_INFRASTRUCTURE");
       checkpoint(run);
       store.transition(run.record.id(), ExperimentState.VALIDATING);
@@ -172,9 +174,10 @@ public final class ExperimentCoordinator implements AutoCloseable {
       LoadGeneratorClient.LoadStatus started = load.start(run.record.spec());
       run.loadId = started.runId();
       checkLoad(run, started);
+      long warmingAt = nanos.getAsLong();
+      lab.loadStarted();
       checkpoint(run);
       store.transition(run.record.id(), ExperimentState.WARMING_UP);
-      long warmingAt = nanos.getAsLong();
       while (nanos.getAsLong() - warmingAt < run.record.spec().fault().at().toNanos()) {
         checkpoint(run);
         checkLoad(run, load.status());
@@ -186,6 +189,13 @@ public final class ExperimentCoordinator implements AutoCloseable {
       checkpoint(run);
       Instant faultAt = clock.instant();
       lab.injectFault(run.record.spec().fault());
+      Instant observedFault = lab.observedFaultAt();
+      if (observedFault != null) {
+        if (observedFault.isBefore(faultAt) || observedFault.isAfter(clock.instant())) {
+          throw new IllegalStateException("LAB_FAULT_OBSERVATION_OUTSIDE_REQUEST_INTERVAL");
+        }
+        faultAt = observedFault;
+      }
       store.recordTimings(run.record.id(), faultAt, null);
       checkpoint(run);
       Instant recoveryAt = clock.instant();
@@ -200,6 +210,7 @@ public final class ExperimentCoordinator implements AutoCloseable {
         checkpoint(run);
         validateMetrics(run, sample);
         RecoveryControlStatus status = cruise.status();
+        Instant statusObservedAt = clock.instant();
         run.lastRecovery = status;
         checkpoint(run);
         if (status.failed()) throw new IllegalStateException("RECOVERY_FAILED: " + status.reason());
@@ -236,7 +247,7 @@ public final class ExperimentCoordinator implements AutoCloseable {
           run.lastDecision = decision;
         }
         if (status.completed() && !status.active()) {
-          store.recordRecoveryFinished(run.record.id(), timestamp);
+          store.recordRecoveryFinished(run.record.id(), statusObservedAt);
           break;
         }
         pause.await(pollInterval);
@@ -287,6 +298,12 @@ public final class ExperimentCoordinator implements AutoCloseable {
   }
 
   private void checkpoint(Run run) {
+    checkCancellation(run);
+    lab.tick();
+    checkCancellation(run);
+  }
+
+  private void checkCancellation(Run run) {
     if (run.timedOut || nanos.getAsLong() - run.startedNanos >= run.record.spec().timeout().toNanos()) {
       run.timedOut = true;
       throw new RunAborted("TIMEOUT");

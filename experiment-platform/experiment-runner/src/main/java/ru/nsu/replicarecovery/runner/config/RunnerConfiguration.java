@@ -30,7 +30,7 @@ public class RunnerConfiguration {
   ExperimentCoordinator experimentCoordinator(ExperimentResultStore store, LoadGeneratorClient load,
       CruiseControlClient cruise, PrometheusClient monitor, LabController lab, Clock clock,
       @Value("${runner.poll-interval:1s}") String interval,
-      @Value("${runner.cleanup-timeout:30s}") String cleanup, Environment environment) {
+      @Value("${runner.cleanup-timeout:3m}") String cleanup, Environment environment) {
     return new ExperimentCoordinator(store, load, cruise, monitor, lab, clock,
         DurationStyle.detectAndParse(interval), DurationStyle.detectAndParse(cleanup), System::nanoTime,
         duration -> TimeUnit.NANOSECONDS.sleep(duration.toNanos()),

@@ -63,11 +63,16 @@ class RunnerStartupRecoveryTest {
   }
 
   @Test
-  void absentRealLabAdapterCannotPretendCleanupSucceeded() {
+  void unavailableLabCannotPretendCleanupSucceeded() {
     incomplete();
     assertThatThrownBy(() -> new SpringApplicationBuilder(ExperimentRunnerApplication.class)
         .web(WebApplicationType.NONE)
-        .initializers(RunnerStartupRecoveryTest::registerIdleClients)
+        .initializers(application -> {
+          registerIdleClients(application);
+          application.getBeanFactory().registerSingleton("unavailableLab", (LabController) () -> {
+            throw new IllegalStateException("lab is unavailable");
+          });
+        })
         .run("--runner.results-directory=" + root, "--spring.main.banner-mode=off"))
         .isInstanceOf(RuntimeException.class);
     assertThat(store().get("interrupted").state()).isEqualTo(ExperimentState.FAILED);

@@ -68,7 +68,7 @@ bash infrastructure/scripts/lab-down.sh
 хранилище, summary и обработка незавершённых запусков после рестарта.
 Проверка из `experiment-platform`: `bash ./gradlew :experiment-runner:test`.
 HTTP API и координатор Runner реализованы в Task 6. Профиль `test-lab` проверяет
-полный цикл без физических отказов; настоящий DockerLabController относится к Task 9.
+полный цикл без физических отказов; в Task 9 добавлен настоящий DockerLabController.
 [Описание и демонстрационный результат Task 5](docs/implementation/task-05-runner-state-and-result-store.md).
 
 Сборка Runner: `bash ./gradlew :experiment-runner:bootJar` из `experiment-platform`.
@@ -96,7 +96,7 @@ bash infrastructure/scripts/reset-lab.sh
 ```
 
 `RUNNER_API_URL` меняет адрес API для скриптов. Настоящий Docker-адаптер
-остаётся Task 9; `runner-smoke.yaml` предназначен для test-lab.
+реализован в Task 9; `runner-smoke.yaml` предназначен для test-lab.
 Для JS-тестов нужен Node.js 20+ (можно запускать из Windows, независимо от Java в WSL).
 Для JS-тестов нужен Node.js 20+ (можно запускать из Windows, независимо от Java в WSL).
 Проверки: `node --test infrastructure/tests/ui-behaviour.cjs` и
@@ -125,6 +125,29 @@ bash infrastructure/tests/monitoring-smoke.sh dev
 Тогда `monitoring-outage-smoke.sh` останавливает только Prometheus и восстанавливает
 его готовность; отказы Kafka и восстановление остаются имитационными.
 [Task 8 — мониторинг и контрольная точка](docs/implementation/task-08-lab-monitoring.md).
+
+Task 9 добавляет реальные ресурсные профили и управляемые отказы. Обычный Runner
+запускается в Linux/WSL; разрешены только фиксированные скрипты и проверяемые
+broker/profile/zone IDs. Профили находятся в `infrastructure/profiles/`, расписание
+изменений задаётся в `resources.schedule` сценария относительно старта нагрузки.
+Cleanup восстанавливает ресурсы, запускает брокеры и подтверждает здоровье/отсутствие
+reassignments. Ошибка очистки продолжает блокировать новый опыт.
+
+```bash
+# Из корня проекта в WSL, при работающем стенде
+bash infrastructure/scripts/apply-profile.sh validate network-constrained
+bash infrastructure/scripts/apply-profile.sh apply network-constrained
+bash infrastructure/scripts/cleanup-lab.sh
+```
+
+Прямой CLI apply используется также для калибровки; Runner требует подтверждённый
+admission для ограниченных профилей. Наличие правил tc/io.max не считается измерением.
+Полный пользовательский контур восстановления всё ещё требует Tasks 12–13.
+`LAB_BROKER_IDS` задаёт физическую топологию (по умолчанию `MONITORING_BROKER_IDS`
+или `1,2,3,4`; для final явно `1,2,3,4,5,6`). `RUNNER_PROJECT_DIRECTORY` — путь
+к корню проекта, `LAB_COMMAND_TIMEOUT` и `RUNNER_CLEANUP_TIMEOUT` по умолчанию 3 минуты.
+Запускайте калибровку на свободном от других опытов стенде.
+[Task 9 — профили, отказы, калибровка и ограничения](docs/implementation/task-09-lab-profiles-and-faults.md).
 
 - [Отчёты по реализации задач](docs/implementation/README.md). После каждой задачи отчёт сохраняется в `docs/implementation/`.
 - [Спецификация](docs/superpowers/specs/2026-09-10-adaptive-replica-recovery-design.md)

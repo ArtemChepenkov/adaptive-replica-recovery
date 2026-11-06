@@ -1,0 +1,6 @@
+schemaVersion: 1
+name: zone-degradation
+brokers: [broker-1, broker-4]
+cpu: {cpus: 0.5}
+network: {egressMbit: 50, ingressMbit: 50, delayMs: 10, jitterMs: 2, lossPercent: 0.1}
+disk: {readMiBps: null, writeMiBps: null}

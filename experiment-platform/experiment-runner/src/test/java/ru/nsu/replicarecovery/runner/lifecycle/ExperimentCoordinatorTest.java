@@ -17,7 +17,9 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import ru.nsu.replicarecovery.model.*;
@@ -37,7 +39,7 @@ class ExperimentCoordinatorTest {
       var accepted = coordinator.start(spec());
       var done = coordinator.completion(accepted.id()).get(5, TimeUnit.SECONDS);
       assertThat(done.state()).isEqualTo(ExperimentState.COMPLETED);
-      assertThat(fixture.calls).containsSubsequence("validate", "prepare", "load.start", "fault", "recovery.start",
+      assertThat(fixture.calls).containsSubsequence("lab.begin", "validate", "prepare", "load.start", "lab.loadStarted", "fault", "recovery.start",
           "recovery.status", "load.stop", "cleanup");
       assertThat(fixture.polls.get()).isEqualTo(3);
       assertThat(fixture.cleanups.get()).isEqualTo(1);
@@ -47,6 +49,7 @@ class ExperimentCoordinatorTest {
       assertThat(fixture.store.get(accepted.id()).measurementEndedAt()).isBeforeOrEqualTo(done.updatedAt());
       assertThat(coordinator.stop(accepted.id()).state()).isEqualTo(ExperimentState.COMPLETED);
       assertThat(coordinator.summary(accepted.id())).isEqualTo(fixture.store.summary(accepted.id()));
+      assertThat(coordinator.events(accepted.id()).toString()).contains("LAB_CONTEXT_STARTED");
     }
   }
 
@@ -59,6 +62,79 @@ class ExperimentCoordinatorTest {
       assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.FAILED);
       assertThat(fixture.calls).contains("load.stop", "recovery.stop", "cleanup");
       assertThat(fixture.cleanups.get()).isEqualTo(1);
+    }
+  }
+
+  @Test
+  void aLongProfileChangeCannotStartRecoveryAfterTheExperimentDeadline() throws Exception {
+    Fixture fixture = new Fixture();
+    fixture.onTick = () -> {
+      if (fixture.calls.contains("fault")) fixture.time.advance(Duration.ofSeconds(20));
+    };
+    try (var coordinator = fixture.coordinator(fixture.time::advance)) {
+      String id = coordinator.start(spec()).id();
+      assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.FAILED);
+      assertThat(coordinator.get(id).reason()).isEqualTo("TIMEOUT");
+      assertThat(fixture.calls).contains("fault", "load.stop", "cleanup").doesNotContain("recovery.start");
+    }
+  }
+
+  @Test
+  void initialProfileApplicationDoesNotRestartTheFaultWarmupClock() throws Exception {
+    Fixture fixture = new Fixture();
+    AtomicBoolean applied = new AtomicBoolean();
+    fixture.onTick = () -> {
+      if (applied.compareAndSet(false, true)) fixture.time.advance(Duration.ofSeconds(3));
+    };
+    try (var coordinator = fixture.coordinator(fixture.time::advance)) {
+      String id = coordinator.start(spec()).id();
+      assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.COMPLETED);
+      assertThat(coordinator.get(id).faultAt()).isEqualTo(Instant.parse("2026-10-29T10:00:03Z"));
+    }
+  }
+
+  @Test
+  void recordsConfirmedPhysicalFaultTimeInsteadOfTheStartOfASlowCommand() throws Exception {
+    Fixture fixture = new Fixture();
+    fixture.faultDuration = Duration.ofSeconds(3);
+    fixture.faultObservation = Instant.parse("2026-10-29T10:00:05Z");
+    try (var coordinator = fixture.coordinator(fixture.time::advance)) {
+      String id = coordinator.start(spec()).id();
+      assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.COMPLETED);
+      assertThat(coordinator.get(id).faultAt()).isEqualTo(fixture.faultObservation);
+      assertThat(coordinator.get(id).recoveryStartedAt()).isEqualTo(fixture.faultObservation);
+    }
+  }
+
+  @Test
+  void recordsRecoveryCompletionBeforeASlowProfileChangeAfterTheCompletedStatus() throws Exception {
+    Fixture fixture = new Fixture();
+    var observedCompletion = new AtomicReference<Instant>();
+    fixture.onTick = () -> {
+      if (fixture.polls.get() >= 3 && observedCompletion.compareAndSet(null, fixture.time.instant())) {
+        fixture.time.advance(Duration.ofSeconds(3));
+      }
+    };
+    try (var coordinator = fixture.coordinator(fixture.time::advance)) {
+      String id = coordinator.start(spec()).id();
+      assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.COMPLETED);
+      assertThat(observedCompletion.get()).isNotNull();
+      var record = coordinator.get(id);
+      assertThat(record.recoveryFinishedAt()).isEqualTo(observedCompletion.get());
+      assertThat(record.measurementEndedAt()).isAfterOrEqualTo(observedCompletion.get().plusSeconds(3));
+    }
+  }
+
+  @Test
+  void anInvalidPhysicalFaultObservationCannotStartRecoveryOrCorruptTimings() throws Exception {
+    Fixture fixture = new Fixture();
+    fixture.faultObservation = Instant.parse("2026-10-29T11:00:00Z");
+    try (var coordinator = fixture.coordinator(fixture.time::advance)) {
+      String id = coordinator.start(spec()).id();
+      assertThat(coordinator.completion(id).get(5, TimeUnit.SECONDS).state()).isEqualTo(ExperimentState.FAILED);
+      assertThat(coordinator.get(id).faultAt()).isNull();
+      assertThat(fixture.calls).doesNotContain("recovery.start");
+      assertThat(coordinator.events(id).toString()).contains("LAB_FAULT_OBSERVATION_OUTSIDE_REQUEST_INTERVAL");
     }
   }
 
@@ -202,6 +278,9 @@ class ExperimentCoordinatorTest {
     boolean neverCompletes;
     boolean cleanupFails;
     boolean monitoringFails;
+    Runnable onTick = () -> { };
+    Duration faultDuration = Duration.ZERO;
+    Instant faultObservation;
     boolean loadTerminalFailed;
     final ExperimentSpec spec = spec();
 
@@ -232,9 +311,16 @@ class ExperimentCoordinatorTest {
       public void stopRecovery() { calls.add("recovery.stop"); recoveryActive = false; }
     };
     final LabController lab = new LabController() {
+      public void beginExperiment(String id, java.util.function.BiConsumer<String, String> events) {
+        calls.add("lab.begin");
+        events.accept("INFO", "LAB_CONTEXT_STARTED");
+      }
+      public void loadStarted() { calls.add("lab.loadStarted"); }
+      public void tick() { if (loadRunning) onTick.run(); }
       public LabValidation validate(ExperimentSpec ignored) { calls.add("validate"); return LabValidation.ok(); }
       public void prepare(ExperimentSpec ignored) { calls.add("prepare"); }
-      public void injectFault(FaultSpec ignored) { calls.add("fault"); }
+      public void injectFault(FaultSpec ignored) { calls.add("fault"); time.advance(faultDuration); }
+      public Instant observedFaultAt() { return faultObservation; }
       public CleanupResult cleanup() {
         calls.add("cleanup"); cleanups.incrementAndGet();
         return new CleanupResult(true, !cleanupFails, cleanupFails ? List.of("CLEANUP_TEST_FAILURE") : List.of());

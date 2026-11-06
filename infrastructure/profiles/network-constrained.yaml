@@ -1,0 +1,6 @@
+schemaVersion: 1
+name: network-constrained
+brokers: [broker-4]
+cpu: {cpus: 1.0}
+network: {egressMbit: 100, ingressMbit: 100, delayMs: 0, jitterMs: 0, lossPercent: 0}
+disk: {readMiBps: null, writeMiBps: null}
