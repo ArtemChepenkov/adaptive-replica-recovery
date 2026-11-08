@@ -1,0 +1,41 @@
+schemaVersion: 1
+name: unsatisfiable
+seed: 20260910
+timeout: 14m
+slo:
+  # Intentionally beyond the capability of the lab, even under light load.
+  produceP99Ms: 0.1
+  maxErrorRate: 0.03
+load:
+  mode: CONSTANT
+  messageSizeBytes: 65536
+  schedule:
+    - duration: 15m
+      requestsPerSecond: 20
+recovery:
+  throttlePolicy: AIMD
+  adaptiveThrottleEnabled: true
+  riskOrderingEnabled: false
+  initialThrottleMiBps: 1
+  minThrottleMiBps: 1
+  maxThrottleMiBps: 2
+  additiveStepMiBps: 1
+  maxChangeMiBps: 1
+  metricsWindow: 15s
+  progressFloorMiBps: 2
+  minProgressMiBps: 6
+  noProgressWindows: 2
+  execution:
+    operation: REBALANCE
+    goal: ReplicaDistributionGoal
+    destinationBrokerIds: [1, 2, 3, 4, 5]
+    excludedTopics: '^(?!acceptance-signals$).*'
+    concurrentMovements: 12
+    maxClusterMovements: 12
+    stockConcurrencyAdjusterEnabled: false
+resources:
+  profile: normal
+fault:
+  action: STOP_BROKER
+  target: broker-6
+  at: 12s

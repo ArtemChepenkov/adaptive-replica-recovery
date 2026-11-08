@@ -543,6 +543,29 @@ def cleanup(phase):
     return {'reassignments': output.strip()}
 
 
+def wait_for_broker_fencing(brokers, stopped):
+    peer = next(((name, info) for name, info in brokers.items()
+                 if name != stopped and info['State'].get('Running')), None)
+    if peer is None:
+        raise RuntimeError('No live peer to verify Kafka broker fencing')
+    name, info = peer
+    peer_id, stopped_id = name.split('-')[-1], stopped.split('-')[-1]
+    deadline = time.monotonic() + 40
+    ids = set()
+    while time.monotonic() < deadline:
+        try:
+            reply = execute(info['Id'], 'env', 'KAFKA_HEAP_OPTS=-Xmx96m',
+                            '/opt/kafka/bin/kafka-cluster.sh', 'list-endpoints',
+                            '--bootstrap-server', f'{name}:9092', timeout=12, check=False)
+            ids = set(re.findall(r'^ *(\d+) +\S+ +\d+ +\S+ +unfenced +broker *$', reply.stdout, re.MULTILINE))
+            if reply.returncode == 0 and peer_id in ids and stopped_id not in ids:
+                return
+        except subprocess.TimeoutExpired:
+            pass
+        time.sleep(1)
+    raise RuntimeError(f'Kafka metadata still has not confirmed fencing of {stopped}. Live broker IDs: {sorted(ids)}')
+
+
 def fault(mode, action, target):
     if mode not in {'validate', 'apply'} or action not in FAULTS or not NAME.fullmatch(target):
         raise ValueError('Unknown fault action or invalid target')
@@ -601,6 +624,8 @@ def fault(mode, action, target):
                 raise RuntimeError('Broker remains reachable after network isolation')
         # Observe the confirmed failure before a RESTART starts the container again.
         observations.append({'broker': name, 'observedAt': observed_now()})
+        if action == 'STOP_BROKER' and os.environ.get('LAB_WAIT_FOR_BROKER_FENCING') == 'true':
+            wait_for_broker_fencing(all_brokers, name)
         if action == 'RESTART_BROKER':
             docker('start', container)
             for attempt in range(60):

@@ -10,10 +10,10 @@ public record ExperimentMetricRow(
     double offeredRps,
     double achievedRps,
     long throttleBytesPerSecond,
-    long remainingBytes,
-    long progressBytesPerSecond,
-    int criticalPartitions,
-    boolean safeState,
+    Long remainingBytes,
+    Long progressBytesPerSecond,
+    Integer criticalPartitions,
+    Boolean safeState,
     Double brokerCpuPercent,
     Double brokerNetworkOutBytesPerSecond,
     Double brokerDiskWriteBytesPerSecond,
@@ -29,8 +29,9 @@ public record ExperimentMetricRow(
   public ExperimentMetricRow {
     if (timestamp == null || !valid(produceP99Ms) || !Double.isFinite(errorRate)
         || errorRate < 0 || errorRate > 1 || !valid(offeredRps) || !valid(achievedRps)
-        || throttleBytesPerSecond < 0 || remainingBytes < 0 || progressBytesPerSecond < 0
-        || criticalPartitions < 0 || !valid(brokerCpuPercent)
+        || throttleBytesPerSecond < 0 || (remainingBytes != null && remainingBytes < 0)
+        || (progressBytesPerSecond != null && progressBytesPerSecond < 0)
+        || (criticalPartitions != null && criticalPartitions < 0) || !valid(brokerCpuPercent)
         || !valid(brokerNetworkOutBytesPerSecond) || !valid(brokerDiskWriteBytesPerSecond)) {
       throw new IllegalArgumentException("metric values must be finite and non-negative; errorRate in [0,1]");
     }

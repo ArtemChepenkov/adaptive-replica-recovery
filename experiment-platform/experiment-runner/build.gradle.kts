@@ -9,6 +9,7 @@ dependencies {
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.thymeleaf)
     implementation(libs.jackson.dataformat.yaml)
+    implementation(libs.kafka.clients)
 
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.wiremock.standalone)

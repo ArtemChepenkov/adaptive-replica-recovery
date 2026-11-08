@@ -1,30 +1,56 @@
 package ru.nsu.replicarecovery.runner.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 import ru.nsu.replicarecovery.model.ExperimentSpec;
+import ru.nsu.replicarecovery.model.RecoveryExecutionSpec;
+import ru.nsu.replicarecovery.model.RecoverySpec;
 
 /** An execution belongs to one tracked User-Task-ID; HTTP acceptance is not execution completion. */
-public final class HttpCruiseControlClient implements CruiseControlClient {
+public final class HttpCruiseControlClient implements CruiseControlClient, AutoCloseable {
+  private static final long MIB = 1_048_576L;
+  private static final String INTER_BROKER_REPLICA = "INTER_BROKER_REPLICA";
   private final HttpJsonTransport http;
-  private volatile String taskId;
-  private volatile boolean ambiguousStart;
-  private volatile long initialThrottle;
+  private final KafkaRecoveryTelemetry kafka;
+  private String taskId;
+  private boolean ambiguousStart;
+  private long lastThrottle;
+  private RecoverySpec recovery;
+  private Long previousFinishedBytes;
+  private long previousFinishedAt;
+  private Boolean previousAdjuster;
+  private boolean adjusterUnverified;
 
-  public HttpCruiseControlClient(String baseUrl) { this(new HttpJsonTransport(baseUrl)); }
-  HttpCruiseControlClient(HttpJsonTransport http) { this.http = http; }
+  public HttpCruiseControlClient(String baseUrl) { this(baseUrl, null); }
+  public HttpCruiseControlClient(String baseUrl, String bootstrapServers) {
+    // Cruise Control waits up to ten seconds by default before returning async progress and the task ID.
+    this(new HttpJsonTransport(baseUrl, Duration.ofSeconds(15)), bootstrapServers == null || bootstrapServers.isBlank()
+        ? null : new KafkaRecoveryTelemetry(bootstrapServers));
+  }
+  HttpCruiseControlClient(HttpJsonTransport http) { this(http, null); }
+  private HttpCruiseControlClient(HttpJsonTransport http, KafkaRecoveryTelemetry kafka) {
+    this.http = http;
+    this.kafka = kafka;
+  }
 
   @Override
   public synchronized String startRecovery(ExperimentSpec spec) {
-    initialThrottle = Math.multiplyExact(spec.recovery().initialThrottleMiBps(), 1_048_576L);
-    String query = "/kafkacruisecontrol/rebalance?dryrun=false&json=true&replication_throttle=" + initialThrottle
-        + "&recovery_control=" + spec.recovery().adaptiveThrottleEnabled();
-    if (spec.recovery().riskOrderingEnabled()) {
-      query += "&replica_movement_strategies=" + HttpJsonTransport.query("RiskAwareReplicaMovementStrategy");
+    if (previousAdjuster != null || adjusterUnverified) {
+      throw new IllegalStateException("previous concurrency adjuster setting has not been restored");
     }
     taskId = null;
+    ambiguousStart = false;
+    previousFinishedBytes = null;
+    recovery = spec.recovery();
+    lastThrottle = Math.multiplyExact(recovery.initialThrottleMiBps(), MIB);
+    String query = recoveryRequest(recovery);
+    if (recovery.execution() != null && recovery.execution().stockConcurrencyAdjusterEnabled() != null) {
+      configureAdjuster(recovery.execution().stockConcurrencyAdjusterEnabled());
+    }
     ambiguousStart = true;
     HttpJsonTransport.Reply reply;
     try {
@@ -32,8 +58,7 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
     } catch (RemoteCallException exception) {
       // A definite client error rejected this request. Timeouts and server errors
       // cannot prove whether the execution was accepted before the response failed.
-      if (exception.statusCode() >= 400 && exception.statusCode() < 500
-          && exception.statusCode() != 408) {
+      if (definiteRejection(exception)) {
         ambiguousStart = false;
       }
       throw exception;
@@ -47,20 +72,102 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
     return id;
   }
 
+  private String recoveryRequest(RecoverySpec spec) {
+    RecoveryExecutionSpec execution = spec.execution();
+    boolean remove = execution != null && execution.operation() == RecoveryExecutionSpec.Operation.REMOVE_BROKER;
+    StringBuilder query = new StringBuilder("/kafkacruisecontrol/")
+        .append(remove ? "remove_broker" : "rebalance")
+        .append("?dryrun=false&json=true&replication_throttle=").append(lastThrottle);
+    if (remove) {
+      query.append("&brokerid=").append(execution.brokerId());
+    } else {
+      query.append("&recovery_control=").append(spec.adaptiveThrottleEnabled());
+    }
+    if (spec.riskOrderingEnabled()) {
+      query.append("&replica_movement_strategies=RiskAwareReplicaMovementStrategy");
+    }
+    if (execution != null) {
+      if (execution.goal() != null) {
+        query.append("&goals=").append(HttpJsonTransport.query(execution.goal())).append("&skip_hard_goal_check=true");
+      }
+      if (execution.excludedTopics() != null) {
+        query.append("&excluded_topics=").append(HttpJsonTransport.query(execution.excludedTopics()));
+      }
+      if (execution.concurrentMovements() != null) {
+        query.append("&concurrent_partition_movements_per_broker=").append(execution.concurrentMovements());
+      }
+      if (execution.maxClusterMovements() != null) {
+        query.append("&max_partition_movements_in_cluster=").append(execution.maxClusterMovements());
+      }
+      if (execution.destinationBrokerIds() != null) {
+        query.append("&destination_broker_ids=").append(execution.destinationBrokerIds().stream()
+            .map(String::valueOf).collect(Collectors.joining(",")));
+      }
+    }
+    return query.toString();
+  }
+
+  private void configureAdjuster(boolean enabled) {
+    adjusterUnverified = true;
+    JsonNode response;
+    try {
+      response = setAdjuster(enabled);
+    } catch (RemoteCallException exception) {
+      if (definiteRejection(exception)) adjusterUnverified = false;
+      throw exception;
+    }
+    previousAdjuster = adjusterState(response, "concurrencyAdjusterEnabledBefore");
+    adjusterUnverified = false;
+    verifyAdjuster(response, enabled);
+  }
+
+  @Override
+  public synchronized void restoreRecoverySettings() {
+    if (adjusterUnverified) {
+      throw new IllegalStateException("previous concurrency adjuster setting is unknown");
+    }
+    if (previousAdjuster != null) {
+      verifyAdjuster(setAdjuster(previousAdjuster), previousAdjuster);
+      previousAdjuster = null;
+    }
+  }
+
+  private JsonNode setAdjuster(boolean enabled) {
+    return http.post("/kafkacruisecontrol/admin?json=true&"
+        + (enabled ? "enable" : "disable") + "_concurrency_adjuster_for=" + INTER_BROKER_REPLICA, null).body();
+  }
+
+  private static void verifyAdjuster(JsonNode response, boolean enabled) {
+    if (adjusterState(response, "concurrencyAdjusterEnabledAfter") != enabled) {
+      throw new RemoteCallException("Cruise Control did not apply the requested concurrency adjuster state", 200);
+    }
+  }
+
+  private static boolean adjusterState(JsonNode response, String key) {
+    JsonNode state = HttpJsonTransport.required(HttpJsonTransport.required(response, key), INTER_BROKER_REPLICA);
+    if (!state.isBoolean()) throw new RemoteCallException("invalid concurrency adjuster state: " + key, 200);
+    return state.booleanValue();
+  }
+
+  private static boolean definiteRejection(RemoteCallException exception) {
+    return exception.statusCode() >= 400 && exception.statusCode() < 500 && exception.statusCode() != 408;
+  }
+
   @Override
   public synchronized RecoveryControlStatus status() {
     if (ambiguousStart) {
       throw new RemoteCallException("ambiguous Cruise Control start; execution ownership cannot be verified", 0);
     }
     JsonNode state = http.get("/kafkacruisecontrol/state?json=true");
-    String executor = HttpJsonTransport.text(HttpJsonTransport.required(state, "ExecutorState"), "state");
+    JsonNode execution = HttpJsonTransport.required(state, "ExecutorState");
+    String executor = HttpJsonTransport.text(execution, "state");
     boolean idle = executor.equals("NO_TASK_IN_PROGRESS");
     if (taskId == null) {
       // The executor can still be idle while an accepted POST is calculating
       // its proposal. Such a task can start moving replicas after this read.
       boolean pendingMutation = hasUntrackedMutation();
       boolean active = !idle || pendingMutation;
-      return new RecoveryControlStatus(false, false, active, initialThrottle, null, null, null, null,
+      return new RecoveryControlStatus(false, false, active, lastThrottle, null, null, null, null,
           active ? "UNTRACKED_EXECUTION" : "NO_TRACKED_EXECUTION", Map.of());
     }
     JsonNode tasks = HttpJsonTransport.required(http.get("/kafkacruisecontrol/user_tasks?json=true&user_task_ids="
@@ -91,9 +198,28 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
       if (exception.statusCode() != 404) { throw exception; }
       control = http.json.createObjectNode();
     }
+    if (control.hasNonNull("executionId") && !taskId.equals(control.path("executionId").asText())) {
+      control = http.json.createObjectNode();
+    }
     Long throttle = optionalLong(control, "currentThrottleBytesPerSecond");
+    if (throttle != null) lastThrottle = throttle;
     Long remaining = optionalLong(control, "remainingBytes");
     Long progress = optionalLong(control, "progressBytesPerSecond");
+    if ((remaining == null || progress == null) && taskId.equals(execution.path("triggeredUserTaskId").asText())) {
+      Long totalMiB = optionalLong(execution, "totalDataToMove");
+      Long finishedMiB = optionalLong(execution, "finishedDataMovement");
+      if (totalMiB != null && finishedMiB != null && totalMiB >= finishedMiB) {
+        long observedAt = System.nanoTime();
+        long finishedBytes = Math.multiplyExact(finishedMiB, MIB);
+        if (remaining == null) remaining = Math.multiplyExact(totalMiB - finishedMiB, MIB);
+        if (progress == null && previousFinishedBytes != null && finishedBytes >= previousFinishedBytes
+            && observedAt > previousFinishedAt) {
+          progress = Math.round((finishedBytes - previousFinishedBytes) * 1_000_000_000.0 / (observedAt - previousFinishedAt));
+        }
+        previousFinishedBytes = finishedBytes;
+        previousFinishedAt = observedAt;
+      }
+    }
     Long critical = optionalLong(control, "criticalPartitions");
     if (critical != null && critical > Integer.MAX_VALUE) {
       throw new RemoteCallException("criticalPartitions exceeds integer range", 200);
@@ -105,6 +231,13 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
       }
       safe = control.get("safeState").booleanValue();
     }
+    if (kafka != null && (critical == null || safe == null)) {
+      var observation = kafka.current(recovery);
+      if (observation != null) {
+        if (critical == null) critical = (long) observation.criticalPartitions();
+        if (safe == null) safe = observation.safe();
+      }
+    }
     String reason = control.hasNonNull("reason")
         ? HttpJsonTransport.text(control, "reason") : "RECOVERY_TELEMETRY_UNAVAILABLE";
     Map<String, Object> decision = new LinkedHashMap<>();
@@ -115,8 +248,16 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
             ? HttpJsonTransport.nonnegativeLong(control, field) : HttpJsonTransport.text(control, field));
       }
     }
+    if (taskId.equals(execution.path("triggeredUserTaskId").asText())) {
+      Long concurrency = optionalLong(execution, "maximumConcurrentPartitionMovementsPerBroker");
+      if (concurrency != null) decision.put("maxConcurrentMovementsPerBroker", concurrency);
+    }
+    if (!decision.isEmpty()) {
+      decision.putIfAbsent("reason", reason);
+      decision.put("throttleBytesPerSecond", lastThrottle);
+    }
     return new RecoveryControlStatus(completed, failed, !(terminal && idle),
-        throttle == null ? initialThrottle : throttle, remaining, progress,
+        lastThrottle, remaining, progress,
         critical == null ? null : critical.intValue(), safe, reason, decision);
   }
 
@@ -124,6 +265,8 @@ public final class HttpCruiseControlClient implements CruiseControlClient {
   public synchronized void stopRecovery() {
     http.post("/kafkacruisecontrol/stop_proposal_execution?json=true", null);
   }
+
+  @Override public void close() { if (kafka != null) kafka.close(); }
 
   private static Long optionalLong(JsonNode node, String field) {
     return node.hasNonNull(field) ? HttpJsonTransport.nonnegativeLong(node, field) : null;

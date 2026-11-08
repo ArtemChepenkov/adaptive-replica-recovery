@@ -2,6 +2,8 @@ package ru.nsu.replicarecovery.model;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public final class ExperimentSpecValidator {
   public void validate(ExperimentSpec spec) {
@@ -80,6 +82,38 @@ public final class ExperimentSpecValidator {
     require(
         recovery.requiredDomains() <= recovery.requiredCopies(),
         "requiredDomains must not exceed requiredCopies");
+    RecoveryExecutionSpec execution = recovery.execution();
+    if (execution != null) {
+      require(execution.operation() != null, "recovery.execution.operation is required");
+      if (execution.goal() != null) {
+        require(execution.goal().matches("[A-Za-z][A-Za-z0-9]*"), "recovery.execution.goal must be a goal name");
+      }
+      if (execution.excludedTopics() != null) {
+        try {
+          Pattern.compile(execution.excludedTopics());
+        } catch (PatternSyntaxException invalid) {
+          throw new IllegalArgumentException("recovery.execution.excludedTopics must be a valid regex", invalid);
+        }
+      }
+      require(execution.concurrentMovements() == null || execution.concurrentMovements() > 0,
+          "recovery.execution.concurrentMovements must be positive");
+      require(execution.maxClusterMovements() == null || execution.maxClusterMovements() > 0,
+          "recovery.execution.maxClusterMovements must be positive");
+      if (execution.operation() == RecoveryExecutionSpec.Operation.REMOVE_BROKER) {
+        require(execution.brokerId() != null && execution.brokerId() >= 0,
+            "recovery.execution.brokerId is required for REMOVE_BROKER");
+        require(!recovery.adaptiveThrottleEnabled(), "adaptive throttling requires REBALANCE");
+        require(execution.destinationBrokerIds() == null, "recovery.execution.destinationBrokerIds requires REBALANCE");
+      } else {
+        require(execution.brokerId() == null, "recovery.execution.brokerId requires REMOVE_BROKER");
+        List<Integer> destinations = execution.destinationBrokerIds();
+        if (destinations != null) {
+          require(!destinations.isEmpty() && destinations.stream().allMatch(id -> id >= 0)
+              && destinations.stream().distinct().count() == destinations.size(),
+              "recovery.execution.destinationBrokerIds must contain distinct non-negative broker IDs");
+        }
+      }
+    }
   }
 
   private static void validateResources(ResourceSpec resources) {

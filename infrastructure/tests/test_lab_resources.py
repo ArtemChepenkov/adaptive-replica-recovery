@@ -17,6 +17,17 @@ def reply(text='', code=0):
 
 
 class LabResourcesTest(unittest.TestCase):
+    def test_waits_until_live_kafka_peer_no_longer_reports_stopped_broker(self):
+        brokers = {f'broker-{index}': {'Id': str(index) * 64, 'State': {'Running': True}}
+                   for index in (1, 6)}
+        live = 'ID  HOST      PORT  RACK    STATE     ENDPOINT_TYPE\n1   broker-1  9092  zone-a  unfenced  broker'
+        stale = live + '\n6   broker-6  9092  zone-c  unfenced  broker'
+        with patch.object(lab, 'execute', side_effect=[reply(), reply(stale), reply(live)]) as execute, \
+                patch.object(lab.time, 'sleep'):
+            lab.wait_for_broker_fencing(brokers, 'broker-6')
+        self.assertEqual(execute.call_count, 3)
+        self.assertEqual(execute.call_args.args[0], '1' * 64)
+
     def test_bad_profile_and_unknown_fault_are_rejected_before_docker(self):
         with patch.object(lab, 'docker') as docker:
             for name in ('../normal', 'normal;true', 'missing-profile'):

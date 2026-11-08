@@ -26,7 +26,7 @@ import ru.nsu.replicarecovery.model.ExperimentSpec;
 import ru.nsu.replicarecovery.model.ExperimentSpecValidator;
 
 /**
- * Loads schema 1 without silently coercing strings, floating point integers or nulls.
+ * Loads schema 1 without silently coercing strings or floating point integers.
  * Defaults are applied only to absent fields. Root seed defaults to 20260910; SLO budgets
  * to 2 minutes and 1000 ms-seconds; resource schedule to empty. Recovery requires policy
  * and initial/min/max throttle; the remaining policy defaults match the initial experiment
@@ -72,7 +72,6 @@ public final class ExperimentSpecLoader {
         .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
         .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .enable(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES)
-        .enable(DeserializationFeature.FAIL_ON_NULL_CREATOR_PROPERTIES)
         .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
         .enable(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS)
         .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
@@ -156,6 +155,17 @@ public final class ExperimentSpecLoader {
         recovery.set(entry.getKey(), entry.getValue());
       }
     });
+    if (!recovery.has("execution")) {
+      recovery.putNull("execution");
+    } else if (recovery.get("execution") instanceof ObjectNode execution) {
+      if (!execution.has("operation")) {
+        execution.put("operation", "REBALANCE");
+      }
+      for (String field : new String[] {"goal", "excludedTopics", "concurrentMovements",
+          "maxClusterMovements", "stockConcurrencyAdjusterEnabled", "brokerId", "destinationBrokerIds"}) {
+        if (!execution.has(field)) execution.putNull(field);
+      }
+    }
   }
 
   private static ObjectNode requiredObject(ObjectNode root, String field) {

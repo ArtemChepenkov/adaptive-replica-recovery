@@ -1,0 +1,35 @@
+schemaVersion: 1
+name: domain-negative
+seed: 20260910
+timeout: 8m
+slo:
+  produceP99Ms: 2500
+  maxErrorRate: 0.03
+load:
+  mode: CONSTANT
+  messageSizeBytes: 65536
+  schedule:
+    - duration: 9m
+      requestsPerSecond: 20
+recovery:
+  throttlePolicy: FIXED
+  adaptiveThrottleEnabled: false
+  riskOrderingEnabled: true
+  initialThrottleMiBps: 4
+  minThrottleMiBps: 4
+  maxThrottleMiBps: 4
+  progressFloorMiBps: 4
+  execution:
+    operation: REMOVE_BROKER
+    goal: RackAwareDistributionGoal
+    excludedTopics: '^(?!acceptance-negative-safe$).*'
+    concurrentMovements: 1
+    maxClusterMovements: 1
+    stockConcurrencyAdjusterEnabled: false
+    brokerId: 4
+resources:
+  profile: normal
+fault:
+  action: STOP_BROKER
+  target: broker-6
+  at: 12s

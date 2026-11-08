@@ -123,6 +123,19 @@ class HttpClientsTest {
   }
 
   @Test
+  void acceptsTheTaskIdAfterCruiseControlsDefaultAsyncWait() {
+    server.stubFor(post(urlPathEqualTo("/kafkacruisecontrol/rebalance")).willReturn(okJson("{\"progress\":[]}")
+        .withHeader("User-Task-ID", "async-task").withFixedDelay(10_100)));
+    var scenario = new ExperimentSpecLoader().load(yaml().replace("maxThrottleMiBps: 100}",
+        "maxThrottleMiBps: 100, execution: {destinationBrokerIds: [1, 2, 3]}}"));
+    try (var client = new HttpCruiseControlClient(server.baseUrl())) {
+      assertThat(client.startRecovery(scenario)).isEqualTo("async-task");
+    }
+    server.verify(1, postRequestedFor(urlPathEqualTo("/kafkacruisecontrol/rebalance"))
+        .withQueryParam("destination_broker_ids", equalTo("1,2,3")));
+  }
+
+  @Test
   void completedTaskDoesNotMeanIdleExecutor() {
     stubStart(true);
     stubTaskAndExecutor("Completed", "INTER_BROKER_REPLICA_MOVEMENT_TASK_IN_PROGRESS");
@@ -149,6 +162,65 @@ class HttpClientsTest {
     server.verify(postRequestedFor(urlPathEqualTo("/kafkacruisecontrol/rebalance"))
         .withQueryParam("recovery_control", equalTo("false"))
         .withoutQueryParam("replica_movement_strategies"));
+  }
+
+  @Test
+  void configuredRemovalTargetsOneBrokerAndRestoresTheStockAdjuster() {
+    server.stubFor(post(urlPathEqualTo("/kafkacruisecontrol/remove_broker"))
+        .willReturn(okJson("{}").withHeader("User-Task-ID", "task-1")));
+    server.stubFor(post(urlPathEqualTo("/kafkacruisecontrol/admin"))
+        .withQueryParam("enable_concurrency_adjuster_for", equalTo("INTER_BROKER_REPLICA"))
+        .willReturn(okJson("""
+            {"concurrencyAdjusterEnabledBefore":{"INTER_BROKER_REPLICA":false},
+             "concurrencyAdjusterEnabledAfter":{"INTER_BROKER_REPLICA":true}}
+            """)));
+    server.stubFor(post(urlPathEqualTo("/kafkacruisecontrol/admin"))
+        .withQueryParam("disable_concurrency_adjuster_for", equalTo("INTER_BROKER_REPLICA"))
+        .willReturn(okJson("""
+            {"concurrencyAdjusterEnabledBefore":{"INTER_BROKER_REPLICA":true},
+             "concurrencyAdjusterEnabledAfter":{"INTER_BROKER_REPLICA":false}}
+            """)));
+    var client = new HttpCruiseControlClient(transport);
+    var spec = new ExperimentSpecLoader().load(yaml().replace("throttlePolicy: AIMD", "throttlePolicy: FIXED")
+        .replace("maxThrottleMiBps: 100}", """
+            maxThrottleMiBps: 100, execution: {operation: REMOVE_BROKER, brokerId: 6,
+            goal: RackAwareDistributionGoal, excludedTopics: '^internal.*$', concurrentMovements: 1,
+            maxClusterMovements: 1, stockConcurrencyAdjusterEnabled: true}}
+            """.stripTrailing()));
+    assertThat(client.startRecovery(spec)).isEqualTo("task-1");
+    client.restoreRecoverySettings();
+    client.restoreRecoverySettings();
+    server.verify(1, postRequestedFor(urlPathEqualTo("/kafkacruisecontrol/remove_broker"))
+        .withQueryParam("brokerid", equalTo("6"))
+        .withQueryParam("goals", equalTo("RackAwareDistributionGoal"))
+        .withQueryParam("excluded_topics", equalTo("^internal.*$"))
+        .withQueryParam("skip_hard_goal_check", equalTo("true"))
+        .withQueryParam("concurrent_partition_movements_per_broker", equalTo("1"))
+        .withQueryParam("max_partition_movements_in_cluster", equalTo("1"))
+        .withoutQueryParam("recovery_control"));
+    server.verify(1, postRequestedFor(urlPathEqualTo("/kafkacruisecontrol/admin"))
+        .withQueryParam("disable_concurrency_adjuster_for", equalTo("INTER_BROKER_REPLICA")));
+  }
+
+  @Test
+  void fixedBacklogUsesOwnedExecutorAndIgnoresForeignControlSnapshot() {
+    stubStart(true);
+    stubTaskAndExecutor("InExecution", "INTER_BROKER_REPLICA_MOVEMENT_TASK_IN_PROGRESS");
+    server.stubFor(get(urlPathEqualTo("/kafkacruisecontrol/state")).willReturn(okJson("""
+        {"ExecutorState":{"state":"INTER_BROKER_REPLICA_MOVEMENT_TASK_IN_PROGRESS",
+         "triggeredUserTaskId":"task-1","totalDataToMove":100,"finishedDataMovement":25,
+         "maximumConcurrentPartitionMovementsPerBroker":2}}
+        """)));
+    server.stubFor(get(urlPathEqualTo("/kafkacruisecontrol/recovery_control")).willReturn(okJson("""
+        {"executionId":"foreign","currentThrottleBytesPerSecond":999,"remainingBytes":1}
+        """)));
+    var client = new HttpCruiseControlClient(transport);
+    client.startRecovery(spec());
+    var status = client.status();
+    assertThat(status.remainingBytes()).isEqualTo(75L * 1_048_576);
+    assertThat(status.throttleBytesPerSecond()).isEqualTo(20L * 1_048_576);
+    assertThat(status.progressBytesPerSecond()).isNull();
+    assertThat(status.decision()).containsEntry("maxConcurrentMovementsPerBroker", 2L);
   }
 
   @Test

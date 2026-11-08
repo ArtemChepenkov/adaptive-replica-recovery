@@ -214,7 +214,6 @@ public final class ExperimentCoordinator implements AutoCloseable {
         run.lastRecovery = status;
         checkpoint(run);
         if (status.failed()) throw new IllegalStateException("RECOVERY_FAILED: " + status.reason());
-        if (!status.measurementAvailable()) throw new IllegalStateException("RECOVERY_TELEMETRY_UNAVAILABLE");
         PrometheusClient.ResourceMetrics resources;
         try {
           resources = monitor.current();
@@ -355,6 +354,7 @@ public final class ExperimentCoordinator implements AutoCloseable {
             status = cruise.status();
           }
         }
+        cruise.restoreRecoverySettings();
       } catch (Exception exception) { errors.add("RECOVERY_STOP: " + exception.getMessage()); Thread.interrupted(); }
     }
     try {

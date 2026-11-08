@@ -129,6 +129,22 @@ class SummaryCalculatorTest {
   }
 
   @Test
+  void reportsUnknownRiskAsMissingCoverageAndPreservesObservedIntervals() {
+    var unknown = new ExperimentMetricRow(START, null, 0, 100, 100, 10,
+        null, null, null, null, null, null, null, null);
+    var absent = calculate(record(START, START), List.of(unknown), 5);
+    assertThat(absent.criticalPartitionSeconds()).isNull();
+    assertThat(absent.timeToSafeSeconds()).isNull();
+    assertThat(absent.missingRiskSeconds()).isEqualTo(5);
+    assertThat(absent.riskDataComplete()).isFalse();
+
+    var partial = calculate(record(START, START), List.of(unknown, row(2, 90.0, 0, 10, 10, 1, false)), 5);
+    assertThat(partial.criticalPartitionSeconds()).isEqualTo(3);
+    assertThat(partial.missingRiskSeconds()).isEqualTo(2);
+    assertThat(partial.riskDataComplete()).isFalse();
+  }
+
+  @Test
   void emptyTraceHasNoInventedLatencyThroughputOrThrottleAggregate() {
     ExperimentSummary summary = calculate(record(null, null), List.of(), 5);
 
@@ -193,7 +209,7 @@ class SummaryCalculatorTest {
   void incompletePerBrokerCoverageCannotBecomeCompleteFromHealthyAggregateNumbers() {
     var monitoring = new MonitoringSnapshot(START, false, Map.of(1, 10.0), Map.of(1, 1024.0),
         Map.of(1, 100.0), Map.of(1, 200.0), 0.0, null, null, List.of("Cruise Control unavailable"));
-    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 0, 1, 0, true,
+    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 0L, 1L, 0, true,
         10.0, 100.0, 200.0, monitoring);
     var summary = calculate(record(START, START), List.of(sample), 5);
     assertThat(summary.diagnosticDataComplete()).isFalse();

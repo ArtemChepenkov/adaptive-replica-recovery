@@ -35,7 +35,11 @@ public final class HttpJsonTransport {
   private final int getAttempts;
 
   HttpJsonTransport(String base) {
-    this(base, Duration.ofSeconds(3), Duration.ofSeconds(10), duration ->
+    this(base, Duration.ofSeconds(10));
+  }
+
+  HttpJsonTransport(String base, Duration readTimeout) {
+    this(base, Duration.ofSeconds(3), readTimeout, duration ->
         TimeUnit.NANOSECONDS.sleep(duration.toNanos()));
   }
 

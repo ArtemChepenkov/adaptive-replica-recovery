@@ -1,0 +1,42 @@
+schemaVersion: 1
+name: metrics-stale
+seed: 20260910
+timeout: 14m
+slo:
+  produceP99Ms: 2500
+  maxErrorRate: 0.03
+load:
+  mode: CONSTANT
+  messageSizeBytes: 65536
+  schedule:
+    - duration: 15m
+      requestsPerSecond: 20
+recovery:
+  throttlePolicy: AIMD
+  adaptiveThrottleEnabled: true
+  riskOrderingEnabled: false
+  initialThrottleMiBps: 2
+  minThrottleMiBps: 1
+  maxThrottleMiBps: 4
+  additiveStepMiBps: 1
+  maxChangeMiBps: 2
+  metricsWindow: 15s
+  staleGrace: 20s
+  safeFallbackThrottleMiBps: 1
+  healthyWindows: 100
+  progressFloorMiBps: 1
+  noProgressWindows: 10
+  execution:
+    operation: REBALANCE
+    goal: ReplicaDistributionGoal
+    destinationBrokerIds: [1, 2, 3, 4, 5]
+    excludedTopics: '^(?!acceptance-signals$).*'
+    concurrentMovements: 12
+    maxClusterMovements: 12
+    stockConcurrencyAdjusterEnabled: false
+resources:
+  profile: normal
+fault:
+  action: STOP_BROKER
+  target: broker-6
+  at: 12s

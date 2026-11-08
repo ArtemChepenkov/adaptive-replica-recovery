@@ -1,0 +1,74 @@
+# Merge one entry onto the same base scenario, preserving data and workload.
+# Use a REBALANCE scenario when comparing adaptive and nonadaptive variants.
+fixed-conservative:
+  recovery:
+    throttlePolicy: FIXED
+    adaptiveThrottleEnabled: false
+    riskOrderingEnabled: false
+    initialThrottleMiBps: 1
+    minThrottleMiBps: 1
+    maxThrottleMiBps: 1
+    safeFallbackThrottleMiBps: 1
+    progressFloorMiBps: 1
+    execution:
+      stockConcurrencyAdjusterEnabled: false
+fixed-tuned:
+  recovery:
+    throttlePolicy: FIXED
+    adaptiveThrottleEnabled: false
+    riskOrderingEnabled: false
+    initialThrottleMiBps: 4
+    minThrottleMiBps: 4
+    maxThrottleMiBps: 4
+    safeFallbackThrottleMiBps: 4
+    progressFloorMiBps: 4
+    execution:
+      stockConcurrencyAdjusterEnabled: false
+stock-concurrency-adjuster:
+  recovery:
+    throttlePolicy: FIXED
+    adaptiveThrottleEnabled: false
+    riskOrderingEnabled: false
+    initialThrottleMiBps: 4
+    minThrottleMiBps: 4
+    maxThrottleMiBps: 4
+    safeFallbackThrottleMiBps: 4
+    progressFloorMiBps: 4
+    execution:
+      stockConcurrencyAdjusterEnabled: true
+adaptive-throttle-only:
+  recovery:
+    throttlePolicy: AIMD
+    adaptiveThrottleEnabled: true
+    riskOrderingEnabled: false
+    initialThrottleMiBps: 1
+    minThrottleMiBps: 1
+    maxThrottleMiBps: 4
+    safeFallbackThrottleMiBps: 1
+    progressFloorMiBps: 1
+    execution:
+      stockConcurrencyAdjusterEnabled: false
+risk-ordering-only:
+  recovery:
+    throttlePolicy: FIXED
+    adaptiveThrottleEnabled: false
+    riskOrderingEnabled: true
+    initialThrottleMiBps: 1
+    minThrottleMiBps: 1
+    maxThrottleMiBps: 1
+    safeFallbackThrottleMiBps: 1
+    progressFloorMiBps: 1
+    execution:
+      stockConcurrencyAdjusterEnabled: false
+full-method:
+  recovery:
+    throttlePolicy: AIMD
+    adaptiveThrottleEnabled: true
+    riskOrderingEnabled: true
+    initialThrottleMiBps: 1
+    minThrottleMiBps: 1
+    maxThrottleMiBps: 4
+    safeFallbackThrottleMiBps: 1
+    progressFloorMiBps: 1
+    execution:
+      stockConcurrencyAdjusterEnabled: false

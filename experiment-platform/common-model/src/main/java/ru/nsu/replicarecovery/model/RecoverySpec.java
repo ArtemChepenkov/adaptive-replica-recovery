@@ -24,6 +24,20 @@ public record RecoverySpec(
     long minProgressMiBps,
     int noProgressWindows,
     int requiredCopies,
-    int requiredDomains) {
+    int requiredDomains,
+    RecoveryExecutionSpec execution) {
+  public RecoverySpec(String throttlePolicy, boolean adaptiveThrottleEnabled, boolean riskOrderingEnabled,
+      long initialThrottleMiBps, long minThrottleMiBps, long maxThrottleMiBps,
+      long additiveStepMiBps, long maxChangeMiBps, double multiplicativeDecrease,
+      Duration controlInterval, Duration metricsWindow, Duration staleGrace,
+      long safeFallbackThrottleMiBps, double healthySloRatio, int healthyWindows,
+      long minimumObservations, Duration cooldown, long progressFloorMiBps, long minProgressMiBps,
+      int noProgressWindows, int requiredCopies, int requiredDomains) {
+    this(throttlePolicy, adaptiveThrottleEnabled, riskOrderingEnabled, initialThrottleMiBps,
+        minThrottleMiBps, maxThrottleMiBps, additiveStepMiBps, maxChangeMiBps, multiplicativeDecrease,
+        controlInterval, metricsWindow, staleGrace, safeFallbackThrottleMiBps, healthySloRatio,
+        healthyWindows, minimumObservations, cooldown, progressFloorMiBps, minProgressMiBps,
+        noProgressWindows, requiredCopies, requiredDomains, null);
+  }
 }
 
