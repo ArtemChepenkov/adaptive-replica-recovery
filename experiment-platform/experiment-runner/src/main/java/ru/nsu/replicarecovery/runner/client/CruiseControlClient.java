@@ -6,4 +6,5 @@ public interface CruiseControlClient {
   String startRecovery(ExperimentSpec spec);
   RecoveryControlStatus status();
   void stopRecovery();
+  default void restoreRecoverySettings() { }
 }

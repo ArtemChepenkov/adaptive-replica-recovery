@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -353,7 +354,11 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
 
   private ExperimentRecord readRecord(String id) {
     return io(() -> {
-      ExperimentRecord record = json.readValue(directory(id).resolve("experiment.json").toFile(), ExperimentRecord.class);
+      var tree = json.readTree(directory(id).resolve("experiment.json").toFile());
+      if (tree.path("spec").path("recovery") instanceof ObjectNode recovery && !recovery.has("execution")) {
+        recovery.putNull("execution");
+      }
+      ExperimentRecord record = json.treeToValue(tree, ExperimentRecord.class);
       if (record.schemaVersion() != 1 || !id.equals(record.id()) || record.state() == null
           || record.plannedOutcome() == null || record.createdAt() == null || record.updatedAt() == null
           || record.updatedAt().isBefore(record.createdAt())) {
@@ -402,13 +407,15 @@ public final class FileExperimentResultStore implements ExperimentResultStore {
     // The first 13 fields are validated numbers/booleans/ISO timestamps and cannot contain commas.
     // Only the final monitoring field is quoted CSV containing compact JSON.
     String[] values = line.split(",", columns);
-    if (values.length != columns || !(values[9].equals("true") || values[9].equals("false"))) {
+    if (values.length != columns || !(values[9].isEmpty() || values[9].equals("true") || values[9].equals("false"))) {
       throw new IllegalArgumentException("invalid metrics CSV row");
     }
     return new ExperimentMetricRow(Instant.parse(values[0]), nullable(values[1]),
         Double.parseDouble(values[2]), Double.parseDouble(values[3]), Double.parseDouble(values[4]),
-        Long.parseLong(values[5]), Long.parseLong(values[6]), Long.parseLong(values[7]),
-        Integer.parseInt(values[8]), Boolean.parseBoolean(values[9]), nullable(values[10]),
+        Long.parseLong(values[5]), values[6].isEmpty() ? null : Long.valueOf(values[6]),
+        values[7].isEmpty() ? null : Long.valueOf(values[7]),
+        values[8].isEmpty() ? null : Integer.valueOf(values[8]),
+        values[9].isEmpty() ? null : Boolean.valueOf(values[9]), nullable(values[10]),
         nullable(values[11]), nullable(values[12]), columns == 14 ? parseMonitoring(values[13]) : null);
   }
 

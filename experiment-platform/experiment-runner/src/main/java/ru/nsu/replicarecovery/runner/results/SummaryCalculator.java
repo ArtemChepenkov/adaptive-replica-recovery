@@ -46,6 +46,8 @@ public final class SummaryCalculator {
     double violationArea = 0;
     double missingLatencySeconds = 0;
     double criticalSeconds = 0;
+    double missingRiskSeconds = 0;
+    boolean criticalMeasured = false;
     boolean diagnosticsComplete = true;
     int measuredRows = 0;
     Instant previous = null;
@@ -91,10 +93,20 @@ public final class SummaryCalculator {
       }
       if (record.faultAt() != null) {
         Instant riskStart = row.timestamp().isBefore(record.faultAt()) ? record.faultAt() : row.timestamp();
-        if (intervalEnd.isAfter(riskStart)) {
-          criticalSeconds += row.criticalPartitions() * seconds(riskStart, intervalEnd);
+        if (row.criticalPartitions() != null && !row.timestamp().isBefore(record.faultAt())) {
+          criticalMeasured = true;
         }
-        if (safeTime == null && row.safeState() && !row.timestamp().isBefore(record.faultAt())) {
+        if (intervalEnd.isAfter(riskStart)) {
+          double riskInterval = seconds(riskStart, intervalEnd);
+          if (row.criticalPartitions() != null) {
+            criticalSeconds += row.criticalPartitions() * riskInterval;
+            criticalMeasured = true;
+          }
+          if (row.criticalPartitions() == null || row.safeState() == null) {
+            missingRiskSeconds += riskInterval;
+          }
+        }
+        if (safeTime == null && Boolean.TRUE.equals(row.safeState()) && !row.timestamp().isBefore(record.faultAt())) {
           safeTime = seconds(record.faultAt(), row.timestamp());
         }
       }
@@ -107,18 +119,17 @@ public final class SummaryCalculator {
     requireFinite(errorIntegral, "error integral");
     requireFinite(violationArea, "SLO violation area");
     requireFinite(criticalSeconds, "critical partition-seconds");
-    double missingRiskSeconds = 0;
     boolean riskDataComplete = false;
     if (record.faultAt() != null) {
       Instant firstCoveredAt = measuredRows == 0 ? measurementEnd : rows.get(0).timestamp();
-      missingRiskSeconds = Math.max(0, seconds(record.faultAt(), firstCoveredAt));
-      riskDataComplete = measuredRows > 0 && missingRiskSeconds == 0;
+      missingRiskSeconds += Math.max(0, seconds(record.faultAt(), firstCoveredAt));
+      riskDataComplete = criticalMeasured && missingRiskSeconds == 0;
     }
     ExperimentOutcome finalOutcome = cleanup.success() ? outcome : ExperimentOutcome.FAILED;
     String finalReason = !cleanup.success() && outcome != ExperimentOutcome.FAILED ? "CLEANUP_FAILED" : reason;
     return new ExperimentSummary(1, record.id(), finalOutcome.finalState(), finalReason, cleanup, false,
         record.createdAt(), finishedAt, measurementEnd, seconds(record.createdAt(), finishedAt), recoveryTime, safeTime,
-        record.faultAt() == null || measuredRows == 0 ? null : criticalSeconds,
+        criticalMeasured ? criticalSeconds : null,
         missingRiskSeconds, riskDataComplete, maximumP99,
         observedSeconds == 0 ? null : errorIntegral / observedSeconds,
         violationSeconds, violationArea, minimumThrottle, maximumThrottle,

@@ -1,0 +1,35 @@
+schemaVersion: 1
+name: smoke-fixed
+seed: 20260910
+timeout: 8m
+slo:
+  produceP99Ms: 2500
+  maxErrorRate: 0.03
+load:
+  mode: CONSTANT
+  messageSizeBytes: 65536
+  schedule:
+    - duration: 9m
+      requestsPerSecond: 20
+recovery:
+  throttlePolicy: FIXED
+  adaptiveThrottleEnabled: false
+  riskOrderingEnabled: false
+  initialThrottleMiBps: 4
+  minThrottleMiBps: 4
+  maxThrottleMiBps: 4
+  progressFloorMiBps: 4
+  execution:
+    operation: REBALANCE
+    goal: ReplicaDistributionGoal
+    destinationBrokerIds: [1, 2, 3, 4, 5]
+    excludedTopics: '^(?!acceptance-fixed$).*'
+    concurrentMovements: 6
+    maxClusterMovements: 12
+    stockConcurrencyAdjusterEnabled: false
+resources:
+  profile: normal
+fault:
+  action: STOP_BROKER
+  target: broker-6
+  at: 12s

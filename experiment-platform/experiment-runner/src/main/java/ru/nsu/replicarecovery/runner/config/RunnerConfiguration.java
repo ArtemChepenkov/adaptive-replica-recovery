@@ -53,8 +53,9 @@ public class RunnerConfiguration {
       return new HttpLoadGeneratorClient(url);
     }
     @Bean @ConditionalOnMissingBean(CruiseControlClient.class)
-    CruiseControlClient cruiseControlClient(@Value("${runner.cruise-url:http://localhost:9090}") String url) {
-      return new HttpCruiseControlClient(url);
+    CruiseControlClient cruiseControlClient(@Value("${runner.cruise-url:http://localhost:9090}") String url,
+        @Value("${runner.kafka-bootstrap-servers:}") String kafkaBootstrapServers) {
+      return new HttpCruiseControlClient(url, kafkaBootstrapServers);
     }
     @Bean @ConditionalOnMissingBean(PrometheusClient.class)
     PrometheusClient prometheusClient(Environment environment, Clock clock) {

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -37,6 +38,22 @@ class FileExperimentResultStoreTest {
     Clock clock = mock(Clock.class);
     when(clock.instant()).thenAnswer(invocation -> now.get());
     store = new FileExperimentResultStore(root, clock);
+  }
+
+  @Test
+  void readsLegacyExperimentSpecAndRoundTripsUnknownRecoveryMeasurements() throws Exception {
+    store.create("legacy", spec());
+    Path path = root.resolve("legacy/experiment.json");
+    var tree = json.readTree(path.toFile());
+    ((ObjectNode) tree.at("/spec/recovery")).remove("execution");
+    json.writeValue(path.toFile(), tree);
+    assertThat(store.get("legacy").spec()).isEqualTo(spec());
+
+    run("legacy");
+    var row = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20,
+        null, null, null, null, null, null, null, null);
+    store.appendMetric("legacy", row);
+    assertThat(store.metrics("legacy")).containsExactly(row);
   }
 
   @Test
@@ -174,7 +191,7 @@ class FileExperimentResultStoreTest {
     var monitoring = new MonitoringSnapshot(START, false, Map.of(1, 12.0), Map.of(1, 1048576.0),
         Map.of(1, 128.0), Map.of(), null, 0.0, "NO_TASK_IN_PROGRESS",
         List.of("missing disk, source \"docker\"", "remote\nerror"));
-    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 100, 1, 3,
+    var sample = new ExperimentMetricRow(START, 90.0, 0, 100, 99, 20, 100L, 1L, 3,
         false, 12.0, 128.0, null, monitoring);
     store.appendMetric("monitoring", sample);
     assertThat(store.metrics("monitoring")).containsExactly(sample);
